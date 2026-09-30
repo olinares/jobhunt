@@ -235,3 +235,20 @@ def test_minimal_config_rejects_disallowed_seniority(minimal_cfg):
     job = make_job("Staff Solutions Engineer", locations=["SF"])
     result = matches(job, minimal_cfg)
     assert result.matched is False
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Solutions Engineer Lead",
+        "Forward Deployed Engineer Lead, Enterprise",
+        "Lead Solutions Engineer",
+    ],
+)
+def test_lead_titles_match_in_either_position(title, cfg):
+    assert matches(make_job(title, ["San Francisco, CA"]), cfg).title_rule is not None
+
+
+@pytest.mark.parametrize("title", ["Solutions Engineer Manager", "Solutions Engineer Head"])
+def test_manager_and_head_suffixes_still_rejected(title, cfg):
+    assert matches(make_job(title, ["San Francisco, CA"]), cfg).title_rule is None
