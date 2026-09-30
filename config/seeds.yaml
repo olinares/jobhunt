@@ -1,0 +1,14 @@
+# Boards polled on every run, whatever discovery finds. Edit freely.
+# Each url is a public job-board URL on Greenhouse, Lever, Ashby, Workday or Gem.
+boards:
+  - {company: Anthropic, url: "https://job-boards.greenhouse.io/anthropic"}
+  - {company: Databricks, url: "https://job-boards.greenhouse.io/databricks"}
+  - {company: Scale AI, url: "https://job-boards.greenhouse.io/scaleai"}
+  - {company: Glean, url: "https://job-boards.greenhouse.io/gleanwork"}
+  - {company: Vercel, url: "https://job-boards.greenhouse.io/vercel"}
+  - {company: OpenAI, url: "https://jobs.ashbyhq.com/openai"}
+  - {company: Ramp, url: "https://jobs.ashbyhq.com/ramp"}
+  - {company: Cohere, url: "https://jobs.ashbyhq.com/cohere"}
+  - {company: Zoox, url: "https://jobs.lever.co/zoox"}
+  - {company: NVIDIA, url: "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"}
+  - {company: Gem, url: "https://jobs.gem.com/gem"}
