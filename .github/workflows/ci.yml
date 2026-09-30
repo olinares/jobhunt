@@ -8,6 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: jobhunt
+          POSTGRES_PASSWORD: jobhunt
+          POSTGRES_DB: jobhunt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobhunt -d jobhunt_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -18,3 +32,5 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql://jobhunt:jobhunt@localhost:5432/jobhunt_test
