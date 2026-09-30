@@ -12,7 +12,7 @@ from html import escape
 
 from jobhunt.formatting import format_locations as _format_locations
 from jobhunt.formatting import format_pay as _format_pay
-from jobhunt.links import link_config, link_url, sign
+from jobhunt.links import LinkConfigError, link_config, link_url, sign
 from jobhunt.models import ScoredJob
 
 SMTP_HOST = "smtp.gmail.com"
@@ -57,16 +57,24 @@ def render_digest(
 
     When ``JOBHUNT_PUBLIC_URL`` and ``JOBHUNT_LINK_SECRET`` are both set (in `env`, default
     ``os.environ``), each item gets signed Approve/Skip links; otherwise the output is the
-    same as without the feature. `now` fixes the links' signing time (tests)."""
-    links = _link_maker(env, now)
+    same as without the feature. Settings that are set but unusable (a short secret, a bad
+    URL) never stop the email: it goes out without links and the footer says why.
+    `now` fixes the links' signing time (tests)."""
+    links, notes = _link_maker(env, now)
     subject = _subject(items, day)
-    return subject, _render_text(items, day, stats, links), _render_html(items, day, stats, links)
+    text = _render_text(items, day, stats, links, notes)
+    return subject, text, _render_html(items, day, stats, links, notes)
 
 
-def _link_maker(env: Mapping[str, str] | None, now: datetime | None) -> _Links:
-    config = link_config(env)
+def _link_maker(env: Mapping[str, str] | None, now: datetime | None) -> tuple[_Links, list[str]]:
+    """The link builder (or None) plus any footer notes. Notes name the variable at fault,
+    never its value."""
+    try:
+        config = link_config(env)
+    except LinkConfigError as exc:
+        return None, [f"⚠ Approve/Skip links off: {exc}"]
     if config is None:
-        return None
+        return None, []
     base, secret = config
 
     def make(uid: str) -> tuple[str, str]:
@@ -75,7 +83,7 @@ def _link_maker(env: Mapping[str, str] | None, now: datetime | None) -> _Links:
 
         return url("approve"), url("skip")
 
-    return make
+    return make, []
 
 
 def send_email(
@@ -130,7 +138,7 @@ def _variant(item: ScoredJob) -> str:
     return VARIANT_LABEL.get(item.score.variant, item.score.variant.upper())
 
 
-def _footer_lines(stats: DigestStats) -> list[str]:
+def _footer_lines(stats: DigestStats, notes: list[str]) -> list[str]:
     summary = (
         f"{stats.boards_polled} boards polled · {stats.jobs_fetched} jobs fetched · "
         f"{stats.relevant} relevant · {stats.new} new · {stats.closed} closed · "
@@ -151,10 +159,12 @@ def _footer_lines(stats: DigestStats) -> list[str]:
         )
     if stats.score_failures:
         lines.append(f"⚠ {stats.score_failures} job(s) failed scoring")
-    return lines
+    return lines + notes
 
 
-def _render_text(items: list[ScoredJob], day: date, stats: DigestStats, links: _Links) -> str:
+def _render_text(
+    items: list[ScoredJob], day: date, stats: DigestStats, links: _Links, notes: list[str]
+) -> str:
     lines = [f"jobhunt digest · {_when(day)}", ""]
     if not items:
         lines += ["No new jobs today.", ""]
@@ -174,11 +184,13 @@ def _render_text(items: list[ScoredJob], day: date, stats: DigestStats, links: _
             lines.append(f"    Skip: {skip}")
         lines.append("")
     lines.append("--")
-    lines += _footer_lines(stats)
+    lines += _footer_lines(stats, notes)
     return "\n".join(lines) + "\n"
 
 
-def _render_html(items: list[ScoredJob], day: date, stats: DigestStats, links: _Links) -> str:
+def _render_html(
+    items: list[ScoredJob], day: date, stats: DigestStats, links: _Links, notes: list[str]
+) -> str:
     e = escape
     body = [
         (
@@ -214,7 +226,7 @@ def _render_html(items: list[ScoredJob], day: date, stats: DigestStats, links: _
                 f'<a href="{e(skip, quote=True)}">Skip</a></div>'
             )
         body.append("</div>")
-    footer = "<br>".join(e(line) for line in _footer_lines(stats))
+    footer = "<br>".join(e(line) for line in _footer_lines(stats, notes))
     body.append(f'<p style="color:#777;font-size:13px;margin:12px 0 0">{footer}</p>')
     body.append("</div>")
     return "\n".join(body) + "\n"

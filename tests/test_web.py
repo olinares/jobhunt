@@ -176,7 +176,7 @@ def test_store_opened_and_closed_per_request(db):
 
 
 def test_short_secret_refused_at_build_time(db):
-    with pytest.raises(ValueError, match="at least 32 bytes"):
+    with pytest.raises(ValueError, match="shorter than 32 bytes"):
         link_routes(lambda: open_store(db), secret="short")
 
 

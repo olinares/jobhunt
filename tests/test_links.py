@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from jobhunt.links import LinkClaim, LinkError, link_config, link_url, sign, verify
+from jobhunt.links import LinkClaim, LinkConfigError, LinkError, link_config, link_url, sign, verify
 
 SECRET = "k" * 32
 NOW = datetime(2026, 9, 30, 13, 30, tzinfo=UTC)
@@ -89,10 +89,10 @@ def test_mac_is_domain_separated():
 
 
 def test_short_secret_is_refused():
-    with pytest.raises(ValueError, match="at least 32 bytes"):
+    with pytest.raises(ValueError, match="shorter than 32 bytes"):
         sign(UID, "approve", secret="k" * 31)
     token = sign(UID, "approve", secret=SECRET, now=NOW)
-    with pytest.raises(ValueError, match="at least 32 bytes"):
+    with pytest.raises(ValueError, match="shorter than 32 bytes"):
         verify(token, secret=b"short")
 
 
@@ -120,8 +120,16 @@ def test_link_config_needs_both_variables():
         "https://x.test",
         SECRET.encode(),
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(LinkConfigError, match="JOBHUNT_LINK_SECRET is shorter"):
         link_config({"JOBHUNT_PUBLIC_URL": "https://x.test", "JOBHUNT_LINK_SECRET": "short"})
+
+
+@pytest.mark.parametrize(
+    "url", ["x.test", "ftp://x.test", "https://", "https://x.test/?a=1", "https://x.test/#f"]
+)
+def test_link_config_rejects_bad_public_url(url):
+    with pytest.raises(LinkConfigError, match="JOBHUNT_PUBLIC_URL is not an http"):
+        link_config({"JOBHUNT_PUBLIC_URL": url, "JOBHUNT_LINK_SECRET": SECRET})
 
 
 def test_link_url():

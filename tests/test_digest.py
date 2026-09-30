@@ -4,6 +4,7 @@ import email
 import re
 from datetime import UTC, date, datetime, timedelta
 from email import policy
+from html import escape
 from typing import ClassVar
 
 import pytest
@@ -259,7 +260,30 @@ def test_digest_without_both_vars_is_unchanged(env):
     assert "/a/" not in plain[1]
 
 
-def test_digest_short_link_secret_fails_loudly():
-    env = {**LINK_ENV, "JOBHUNT_LINK_SECRET": "short"}
-    with pytest.raises(ValueError, match="JOBHUNT_LINK_SECRET"):
-        render_digest(fixture(), day=DAY, stats=STATS, env=env)
+@pytest.mark.parametrize(
+    ("env", "note"),
+    [
+        (
+            {**LINK_ENV, "JOBHUNT_LINK_SECRET": "short-secret-value"},
+            "⚠ Approve/Skip links off: JOBHUNT_LINK_SECRET is shorter than 32 bytes",
+        ),
+        (
+            {**LINK_ENV, "JOBHUNT_PUBLIC_URL": "jobhunt.example.run.app"},
+            "⚠ Approve/Skip links off: JOBHUNT_PUBLIC_URL is not an http(s) base URL",
+        ),
+        (
+            {**LINK_ENV, "JOBHUNT_PUBLIC_URL": "https://x.test/?a=1"},
+            "⚠ Approve/Skip links off: JOBHUNT_PUBLIC_URL is not an http(s) base URL",
+        ),
+    ],
+)
+def test_digest_bad_link_settings_send_without_links_and_say_why(env, note):
+    """A misconfigured link setting must never stop the daily email."""
+    subject, text, html = render_digest(fixture(), day=DAY, stats=STATS, env=env)
+    plain_subject, plain_text, plain_html = render_digest(fixture(), day=DAY, stats=STATS)
+    assert subject == plain_subject
+    assert text == plain_text.removesuffix("\n") + f"\n{note}\n"
+    assert html == plain_html.replace("</p>\n</div>\n", f"<br>{escape(note)}</p>\n</div>\n")
+    assert "Approve: " not in text and ">Approve</a>" not in html
+    for body in (text, html):
+        assert "short-secret-value" not in body

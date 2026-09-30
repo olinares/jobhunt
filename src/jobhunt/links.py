@@ -20,6 +20,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 ACTIONS: tuple[str, ...] = ("approve", "skip")
 DEFAULT_TTL = timedelta(days=14)
@@ -42,25 +43,30 @@ class LinkClaim:
     exp: datetime
 
 
+class LinkConfigError(ValueError):
+    """The link settings are unusable. The message names the variable, never its value."""
+
+
 def secret_bytes(secret: str | bytes) -> bytes:
     """The secret as bytes. Refuses one shorter than 32 bytes (a configuration error,
-    raised as `ValueError`, not a `LinkError`)."""
+    raised as `LinkConfigError`, not a `LinkError`)."""
     raw = secret.encode() if isinstance(secret, str) else secret
     if len(raw) < MIN_SECRET_BYTES:
-        raise ValueError(
-            f"{SECRET_ENV} must be at least {MIN_SECRET_BYTES} bytes "
-            "(generate one with `openssl rand -base64 48`)"
-        )
+        raise LinkConfigError(f"{SECRET_ENV} is shorter than {MIN_SECRET_BYTES} bytes")
     return raw
 
 
 def link_config(env: Mapping[str, str] | None = None) -> tuple[str, bytes] | None:
-    """``(public_url, secret)`` when both env vars are set, else ``None`` (links off)."""
+    """``(public_url, secret)`` when both env vars are set, else ``None`` (links off).
+    Raises `LinkConfigError` when they are set but unusable."""
     env = os.environ if env is None else env
     base = env.get(PUBLIC_URL_ENV, "").strip().rstrip("/")
     secret = env.get(SECRET_ENV, "")
     if not base or not secret:
         return None
+    parts = urlsplit(base)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.query or parts.fragment:
+        raise LinkConfigError(f"{PUBLIC_URL_ENV} is not an http(s) base URL")
     return base, secret_bytes(secret)
 
 
