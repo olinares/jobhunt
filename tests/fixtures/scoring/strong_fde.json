@@ -1,0 +1,57 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC: hand-built in the shape of a Messages API response; no API key was available when this was written. Re-record with tests/fixtures/scoring/record.py.",
+  "case": "strong_fde",
+  "summary": "Embedded, post-sale Forward Deployed Engineer role; strong FDE fit.",
+  "job": {
+    "board": {
+      "ats": "ashby",
+      "slug": "tessellate",
+      "company_name": "Tessellate AI"
+    },
+    "external_id": "b7e2c1d0-0000-4000-8000-000000000002",
+    "title": "Forward Deployed Engineer",
+    "company": "Tessellate AI",
+    "url": "https://jobs.ashbyhq.com/tessellate/b7e2c1d0-0000-4000-8000-000000000002",
+    "locations": [
+      "New York, NY",
+      "Remote (US)"
+    ],
+    "remote": true,
+    "pay_min": 170000.0,
+    "pay_max": 230000.0,
+    "pay_currency": "USD",
+    "pay_period": "year",
+    "department": "Deployment",
+    "description_html": "<p>Forward Deployed Engineers at Tessellate AI work inside our customers&rsquo; teams to put our LLM platform into production.</p><ul><li>Embed with a customer for weeks at a time and own the technical outcome</li><li>Write production Python and TypeScript: integrations, data pipelines, evals</li><li>Feed what you learn back to product and engineering</li></ul><p>You have shipped software with customers, not just demoed it.</p>"
+  },
+  "expected": {
+    "pay_suspect": false
+  },
+  "response": {
+    "id": "msg_synthetic_strong_fde",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"value\": 86, \"variant\": \"fde\", \"reason\": \"Your FDE resume shows hands-on integration and deployment work with customers, which is the core of this role. The posting expects production TypeScript, which the resume only touches on.\"}"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1698,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 69,
+      "service_tier": "standard"
+    }
+  }
+}
