@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jobhunt": {
+      "type": "stdio",
+      "command": "jobhunt-mcp",
+      "args": ["--root", "/path/to/jobhunt"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}",
+        "RESUME_SE": "${RESUME_SE:-}",
+        "RESUME_FDE": "${RESUME_FDE:-}",
+        "SEARCH_API_KEY": "${SEARCH_API_KEY:-}"
+      }
+    }
+  }
+}
