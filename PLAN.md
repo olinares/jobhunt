@@ -30,6 +30,13 @@ Runs in the cloud: GitHub Actions cron → Neon Postgres → Gmail SMTP. Resume 
   H digest (agents/H-digest.md), plus `fix/http-retry-timeouts` (PoliteClient retries timeouts and
   connection errors). F and G both add a dependency to pyproject.toml; the second to merge rebases.
 - Wave 3b (after 3a merges): I `jobhunt daily` + daily.yml (agents/I-daily-integration.md).
+- Follow-ups: #15 retries missing Workday/Gem descriptions and shows discovery status in the
+  digest footer; #20 polls hosts in parallel (one request at a time per host) under a 30-minute
+  time budget, and skips Workday placeholder postings.
+- Optional: group near-duplicate postings. Exact duplicates are already handled (one uid per
+  posting, never emailed twice), but one role posted per location, or on two ATSs, shows up as
+  several digest entries, each scored. Group by company + normalized title: one entry with
+  "also in NYC, Remote", scored once.
 
 ## Phase 4 — MCP server (local)
 Tools: search_jobs, get_job, discover_companies, refresh_boards, update_status, build_packet, list_pipeline.
