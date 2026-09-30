@@ -1,3 +1,7 @@
-# Verified facts (Phase 0 — Oz fills this in)
-Only confirmed facts go here. The tailoring step may use nothing else.
-Move items over from the resume verify checklist as you confirm them.
+# Verified facts
+
+The real list is private: the repo is public, so ticked facts live in gitignored
+`private/verified.md`. See `facts/verified.example.md` for the format.
+
+Tailoring (`build_packet`, Phase 4) loads only `[x]` items from that file and never the
+"Conflicts" section. Nothing else may appear in an application.

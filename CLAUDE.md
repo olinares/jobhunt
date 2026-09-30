@@ -15,7 +15,8 @@ The repo doubles as a public portfolio piece, so code quality and the README mat
 - Be polite to the ATS endpoints: one request at a time per host, ~1s delay, descriptive User-Agent,
   retries with backoff on 429/5xx.
 - No secrets in the repo. API keys come from environment variables (`.env` is gitignored).
-- Tailoring (Phase 4+) may only use facts from `facts/verified.md`. Never invent or estimate metrics.
+- Tailoring (Phase 4+) may only use ticked facts from `private/verified.md` (gitignored; format in
+  `facts/verified.example.md`). Never invent or estimate metrics. Never commit real facts.
 
 ## Git workflow (applies to every change, every phase)
 - Never commit to `main`. The only exception was the initial scaffold commit.
@@ -27,7 +28,8 @@ The repo doubles as a public portfolio piece, so code quality and the README mat
 - Review feedback gets new commits on the same branch, not a new PR.
 
 ## Stack
-Python 3.12, httpx, pydantic-free dataclasses, pyyaml, pytest, ruff. SQLite now, Postgres in Phase 3.
+Python 3.12, httpx, pydantic-free dataclasses (the `mcp` SDK brings pydantic; our own types stay
+dataclasses), pyyaml, pytest, ruff. SQLite now, Postgres in Phase 3.
 MCP server in Phase 4 uses FastMCP from the official Python SDK.
 
 ## Commands
