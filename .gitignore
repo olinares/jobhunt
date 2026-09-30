@@ -3,3 +3,5 @@ __pycache__/
 *.db
 .venv/
 .claude/settings.local.json
+*.egg-info/
+.claude/worktrees/
