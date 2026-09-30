@@ -16,6 +16,7 @@ from jobhunt.evals import (
     load_labels,
     percentile,
     pick_sample,
+    price_for,
     render_report,
     run,
     run_eval,
@@ -276,3 +277,30 @@ def test_unknown_model_has_no_cost():
     report = render_report("some-new-model", results, 0)
     assert "Approximate cost: n/a" in report
     assert "Spearman rho (score vs verdict rank): n/a" in report
+
+
+@pytest.mark.parametrize(
+    ("model", "price"),
+    [
+        ("claude-haiku-4-5", (1.0, 5.0)),
+        ("claude-sonnet-5-5", (2.0, 10.0)),
+        ("claude-opus-5-5", (4.0, 20.0)),
+        ("claude-sonnet-4-5", None),
+    ],
+)
+def test_prices_cover_the_compared_models(model, price):
+    assert price_for(model) == price
+
+
+def test_sonnet_5_5_scores_without_thinking_and_haiku_is_unchanged():
+    jobs = {"j0": make_job(0), "j1": make_job(1)}
+    labels = [Label("j0", "strong", "se"), Label("j1", "no", "fde")]
+
+    haiku = FakeClient([(80, "se"), (10, "fde")])
+    run_eval(haiku, jobs, labels, RESUMES, "claude-haiku-4-5")
+    assert all("thinking" not in call for call in haiku.messages.calls)
+
+    sonnet = FakeClient([(80, "se"), (10, "fde")])
+    run_eval(sonnet, jobs, labels, RESUMES, "claude-sonnet-5-5")
+    assert [c["thinking"] for c in sonnet.messages.calls] == [{"type": "between_tools"}] * 2
+    assert all(c["model"] == "claude-sonnet-5-5" for c in sonnet.messages.calls)
