@@ -72,3 +72,53 @@ run sends the same jobs. Scoring still calls the API and the scores are saved, s
 not paid for twice. The database is `$DATABASE_URL` if set, else `jobhunt.db`; pass
 `--db other.db` to keep a dry run away from your real data. Resumes come from `RESUME_SE` /
 `RESUME_FDE`, else `private/resumes/se.md` and `fde.md` (gitignored).
+
+## Phase 4: Claude Code MCP server
+
+`jobhunt-mcp` is a local [MCP](https://modelcontextprotocol.io) server (stdio) that puts the
+job store, the pipeline and the application packet in front of Claude Code, so the morning
+digest turns into a conversation: "approve 3 and 7", "prep 3".
+
+```bash
+pip install -e ".[dev]"             # installs the jobhunt-mcp script
+export DATABASE_URL=postgresql://…  # the database the daily run writes to
+claude mcp add jobhunt -- jobhunt-mcp --root /path/to/jobhunt
+```
+
+The server runs with the environment `claude` was started in, so start it from a shell with
+`DATABASE_URL` set (plus `RESUME_SE` / `RESUME_FDE` if the resumes aren't in
+`private/resumes/`, and `SEARCH_API_KEY` for discovery), or pass them to `claude mcp add`
+with `-e NAME=value`. If the venv isn't on your `PATH`, use the full path to
+`.venv/bin/jobhunt-mcp`. To share the setup per project instead, copy `.mcp.json.example` to
+`.mcp.json`: it reads the same variables from the environment and holds no secrets.
+
+The server refuses to start without `--db` or `DATABASE_URL`, because the CLI's `jobhunt.db`
+fallback would quietly show an empty database. `config/roles.yaml` and `private/` are read
+from `--root`, and so is a relative SQLite `--db` path. Only the protocol goes to stdout;
+logs go to stderr.
+
+A job is named by a **ref**: `3` is item 3 of the latest digest, `12#3` is item 3 of digest
+12, and a uid such as `greenhouse:acme:123` always works.
+
+| Tool | What it does |
+| --- | --- |
+| `search_jobs(query?, status?, min_score?, variant?, remote?, limit=20)` | Stored jobs, best score first |
+| `get_job(ref)` | Score, reason, status, pay, URL and a description preview |
+| `list_pipeline(statuses?)` | Approved, applied, interviewing and offer jobs, closed ones included |
+| `update_status(refs, status)` | Batch status change; `new` and `closed` are left to the pipeline |
+| `build_packet(ref)` | The application packet: rules, ticked verified facts, resume, description |
+| `discover_companies(max_queries=5)` | Search for new boards and register them; the next run polls them |
+| `refresh_boards(board_keys, max_boards=5)` | Poll up to 10 boards now; new jobs are scored by the daily run |
+
+Resources: `jobhunt://config/roles`, `jobhunt://facts/verified` (ticked facts only) and
+`jobhunt://boards`. Prompts:
+
+- **`morning_triage`** lists the latest digest and the pipeline, asks which numbers to
+  approve or skip, and applies the answer with `update_status`.
+- **`prep_application(ref)`** builds the packet, drafts answers from its facts only, and has
+  Claude in Chrome fill in the form. It never clicks submit: you review and submit, then it
+  marks the job applied.
+
+Applications may only use facts ticked (`[x]`) in gitignored `private/verified.md` (format
+in `facts/verified.example.md`). Without that file, `build_packet` says so instead of
+building a packet.
