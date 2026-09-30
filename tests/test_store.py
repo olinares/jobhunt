@@ -814,3 +814,41 @@ def test_digest_items_in_order_and_empty(store):
     assert store.digest_items(digest_id) == [(1, order[0]), (2, order[1]), (3, order[2])]
     assert store.digest_items(store.record_digest([], now=NOW)) == []
     assert store.digest_items(9999) == []
+
+
+# -- set_status_if (email links) --------------------------------------------
+
+
+def test_set_status_if_changes_only_from_expected(store):
+    job = make_job()
+    store.upsert_jobs([job], now=NOW)
+
+    assert store.set_status_if(job.uid, "approved", expected="new") is True
+    assert store.get_job(job.uid).status == "approved"
+    # The status is no longer "new", so neither a repeat nor a different target changes it.
+    assert store.set_status_if(job.uid, "approved", expected="new") is False
+    assert store.set_status_if(job.uid, "skipped", expected="new") is False
+    assert store.get_job(job.uid).status == "approved"
+
+
+def test_set_status_if_leaves_other_statuses_alone(store):
+    job = make_job()
+    store.upsert_jobs([job], now=NOW)
+    store.set_status(job.uid, "applied")
+
+    assert store.set_status_if(job.uid, "skipped", expected="new") is False
+    assert store.get_job(job.uid).status == "applied"
+
+
+def test_set_status_if_unknown_uid_returns_false(store):
+    assert store.set_status_if("greenhouse:acme:missing", "approved", expected="new") is False
+
+
+def test_set_status_if_rejects_invalid_values(store):
+    job = make_job()
+    store.upsert_jobs([job], now=NOW)
+    with pytest.raises(ValueError):
+        store.set_status_if(job.uid, "ghosted", expected="new")
+    with pytest.raises(ValueError):
+        store.set_status_if(job.uid, "approved", expected="ghosted")
+    assert store.get_job(job.uid).status == "new"

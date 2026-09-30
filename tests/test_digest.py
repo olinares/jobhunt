@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import email
-from datetime import date
+import re
+from datetime import UTC, date, datetime, timedelta
 from email import policy
+from html import escape
 from typing import ClassVar
 
 import pytest
 
 from jobhunt.digest import DigestConfigError, DigestStats, render_digest, send_email
+from jobhunt.links import verify
 from jobhunt.models import BoardRef, Job, Score, ScoredJob
 
 DAY = date(2026, 9, 30)  # a Wednesday
@@ -195,3 +198,92 @@ def test_footer_shows_deferred_boards_only_when_present():
     _, text, html = render_digest(fixture(), day=DAY, stats=stats)
     assert "⚠ 12 board(s) not polled in time; first in line tomorrow" in text
     assert "not polled in time" in html
+
+
+# -- Approve/Skip links -----------------------------------------------------
+
+LINK_SECRET = "s" * 40
+LINK_ENV = {
+    "JOBHUNT_PUBLIC_URL": "https://jobhunt.example.run.app/",
+    "JOBHUNT_LINK_SECRET": LINK_SECRET,
+}
+LINK_BASE = "https://jobhunt.example.run.app/a/"
+SIGNED_AT = datetime(2026, 9, 30, 13, 30, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def no_link_env(monkeypatch):
+    """Keep a developer's real link settings out of the rendering tests."""
+    monkeypatch.delenv("JOBHUNT_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("JOBHUNT_LINK_SECRET", raising=False)
+
+
+def test_digest_with_links():
+    items = fixture()
+    _, text, html = render_digest(items, day=DAY, stats=STATS, env=LINK_ENV, now=SIGNED_AT)
+    approve = re.findall(r"^    Approve: (\S+)$", text, re.MULTILINE)
+    skip = re.findall(r"^    Skip: (\S+)$", text, re.MULTILINE)
+    assert len(approve) == len(skip) == len(items)
+    for item, a_url, s_url in zip(items, approve, skip, strict=True):
+        assert a_url.startswith(LINK_BASE) and s_url.startswith(LINK_BASE)
+        a = verify(a_url.removeprefix(LINK_BASE), secret=LINK_SECRET, now=SIGNED_AT)
+        s = verify(s_url.removeprefix(LINK_BASE), secret=LINK_SECRET, now=SIGNED_AT)
+        assert (a.uid, a.action) == (item.job.uid, "approve")
+        assert (s.uid, s.action) == (item.job.uid, "skip")
+        assert a.exp == SIGNED_AT + timedelta(days=14)
+        assert f'<a href="{a_url}">Approve</a> · <a href="{s_url}">Skip</a>' in html
+    # Each item's links come right after its job URL, before the next item.
+    assert text.index(items[0].job.url) < text.index(approve[0]) < text.index("#2 ·")
+
+
+def test_digest_links_read_process_env(monkeypatch):
+    for name, value in LINK_ENV.items():
+        monkeypatch.setenv(name, value)
+    _, text, html = render_digest(fixture(), day=DAY, stats=STATS)
+    assert text.count(f"    Approve: {LINK_BASE}") == 3
+    assert html.count(">Approve</a> · <a") == 3
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {},
+        {"JOBHUNT_PUBLIC_URL": LINK_ENV["JOBHUNT_PUBLIC_URL"]},
+        {"JOBHUNT_LINK_SECRET": LINK_SECRET},
+        {"JOBHUNT_PUBLIC_URL": "", "JOBHUNT_LINK_SECRET": LINK_SECRET},
+    ],
+)
+def test_digest_without_both_vars_is_unchanged(env):
+    plain = render_digest(fixture(), day=DAY, stats=STATS)
+    assert render_digest(fixture(), day=DAY, stats=STATS, env=env) == plain
+    assert "Approve" not in plain[1] and "Approve" not in plain[2]
+    assert "/a/" not in plain[1]
+
+
+@pytest.mark.parametrize(
+    ("env", "note"),
+    [
+        (
+            {**LINK_ENV, "JOBHUNT_LINK_SECRET": "short-secret-value"},
+            "⚠ Approve/Skip links off: JOBHUNT_LINK_SECRET is shorter than 32 bytes",
+        ),
+        (
+            {**LINK_ENV, "JOBHUNT_PUBLIC_URL": "jobhunt.example.run.app"},
+            "⚠ Approve/Skip links off: JOBHUNT_PUBLIC_URL is not an http(s) base URL",
+        ),
+        (
+            {**LINK_ENV, "JOBHUNT_PUBLIC_URL": "https://x.test/?a=1"},
+            "⚠ Approve/Skip links off: JOBHUNT_PUBLIC_URL is not an http(s) base URL",
+        ),
+    ],
+)
+def test_digest_bad_link_settings_send_without_links_and_say_why(env, note):
+    """A misconfigured link setting must never stop the daily email."""
+    subject, text, html = render_digest(fixture(), day=DAY, stats=STATS, env=env)
+    plain_subject, plain_text, plain_html = render_digest(fixture(), day=DAY, stats=STATS)
+    assert subject == plain_subject
+    assert text == plain_text.removesuffix("\n") + f"\n{note}\n"
+    assert html == plain_html.replace("</p>\n</div>\n", f"<br>{escape(note)}</p>\n</div>\n")
+    assert "Approve: " not in text and ">Approve</a>" not in html
+    for body in (text, html):
+        assert "short-secret-value" not in body
