@@ -1,0 +1,34 @@
+# Edit freely. Matching is case-insensitive on the job title.
+titles:
+  - solutions engineer
+  - sales engineer
+  - client solutions engineer
+  - forward deployed engineer
+  - forward deployed software engineer
+  - deployment engineer
+  - agent engineer
+  - applied ai engineer
+  - applied ai architect
+  - solutions architect
+  - customer engineer
+  - technical consultant
+  - technical account manager   # remove if not wanted
+
+seniority_ok: [senior, staff, lead, principal, ""]   # "" = no level in title
+
+exclude_title_terms:
+  - intern
+  - internship
+  - new grad
+  - manager of
+  - director
+  - vp
+  - recruiter
+
+# Regions still to confirm (Phase 0). Default: Bay Area + Remote-US.
+regions:
+  bay_area:
+    match: [san francisco, sf, bay area, oakland, san jose, palo alto, mountain view,
+            menlo park, sunnyvale, redwood city, san mateo, berkeley, walnut creek]
+  remote_us:
+    match: [remote - us, remote (us), remote, united states, usa, us-remote, anywhere in the us]
