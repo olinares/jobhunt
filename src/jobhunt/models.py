@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 ATS = Literal["greenhouse", "lever", "ashby", "workday", "gem"]
+Variant = Literal["se", "fde"]  # which resume fits: Solutions Engineer or Forward Deployed
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,22 @@ class Job:
     @property
     def uid(self) -> str:
         return f"{self.board.key()}:{self.external_id}"
+
+
+@dataclass(frozen=True)
+class Score:
+    """How well one job fits, and which resume to send."""
+
+    value: int  # 0-100 fit
+    variant: Variant
+    reason: str  # at most two sentences, shown in the digest
+    pay_suspect: bool = False  # placeholder pay such as $1-$2; set in code, not by the model
+
+
+@dataclass
+class ScoredJob:
+    job: Job
+    score: Score
 
 
 class Adapter(Protocol):

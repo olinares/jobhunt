@@ -5,3 +5,6 @@ __pycache__/
 .claude/settings.local.json
 *.egg-info/
 .claude/worktrees/
+
+# Resume text for the scorer (never committed)
+private/
