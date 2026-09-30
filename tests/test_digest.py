@@ -54,7 +54,7 @@ def test_subject_and_numbering_order():
     subject, text, html = render_digest(fixture(), day=DAY, stats=STATS)
     assert subject == "jobhunt · Wed Sep 30 · 3 new (top 88)"
     for body in (text, html):
-        assert body.index("#1") < body.index("#2") < body.index("#3")
+        assert body.index("#1 ·") < body.index("#2 ·") < body.index("#3 ·")
     assert "#1 · 88 · SE · Solutions Engineer · Acme" in text
     assert "#2 · 75 · FDE · Forward Deployed Engineer" in text
     assert "#1 · 88 · SE · Solutions Engineer" in html
