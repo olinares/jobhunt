@@ -55,3 +55,21 @@ The chat model drafts from it.
 ## Phase 5 — Remote + portfolio
 Deploy (Streamable HTTP), add as a custom connector, one-tap Approve/Skip links in the email,
 eval set of ~50 labeled jobs for the scorer, README.
+Done when: the claude.ai connector works through GitHub login, an email tap approves a job,
+the eval results are published, and the README tells the story.
+
+Starts after the Phase 4 end-to-end application; bugs from it ship first as `fix/` PRs.
+Decided (2026-09-30): Google Cloud Run (scales to zero, reaches Neon); the server is its own MCP
+OAuth authorization server with GitHub login allowlisted to one numeric GitHub id; Approve/Skip
+links are HMAC-signed and expire, GET only shows a confirmation page and POST changes the status
+(`new` only), so a mail scanner prefetching links can't approve anything; verified facts reach
+the host as a `VERIFIED_FACTS` secret; eval labels are public in `evals/` (no model reasons or
+resume text there); daily score cap raised from 100 to 300.
+- Wave 5a (parallel): M remote transport + OAuth (agents/M-remote-oauth.md), N email links
+  (agents/N-email-links.md), O1 eval tooling (agents/O-evals.md), Q facts from a secret
+  (agents/Q-facts-secret.md), plus `chore/score-cap-300`. Each appends to `.env.example`; merge
+  M → N → Q and rebase.
+- Wave 5b (after M, N, Q): P deploy (agents/P-deploy.md). Oz follows docs/deploy.md, sets
+  `DEPLOY_ENABLED`, adds the connector.
+- Wave 5c: O2 labels + results for claude-haiku-4-5 vs a larger model, then R README
+  (agents/R-readme.md).
