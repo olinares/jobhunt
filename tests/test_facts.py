@@ -8,6 +8,7 @@ import pytest
 
 from jobhunt.facts import (
     FACTS_ENV,
+    FACTS_TEXT_ENV,
     Fact,
     Facts,
     FactSection,
@@ -26,6 +27,7 @@ def texts(facts: Facts) -> list[str]:
 @pytest.fixture(autouse=True)
 def no_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(FACTS_ENV, raising=False)
+    monkeypatch.delenv(FACTS_TEXT_ENV, raising=False)
 
 
 # --------------------------------------------------------------------------- ticks
@@ -375,6 +377,75 @@ def test_draft_is_refused_even_by_explicit_path(tmp_path: Path) -> None:
     draft.write_text("## S\n- [x] unconfirmed\n", encoding="utf-8")
     with pytest.raises(FactsNotFound, match="draft"):
         load_facts(draft)
+
+
+# --------------------------------------------------------------------------- $VERIFIED_FACTS
+
+
+def test_verified_facts_env_text_loads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv(FACTS_TEXT_ENV, "## S\n- [x] from text\n")
+    assert texts(load_facts(root=tmp_path)) == ["from text"]
+
+
+def test_verified_facts_env_beats_jobhunt_facts_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    other = tmp_path / "other.md"
+    other.write_text("## S\n- [x] from path\n", encoding="utf-8")
+    monkeypatch.setenv(FACTS_ENV, str(other))
+    monkeypatch.setenv(FACTS_TEXT_ENV, "## S\n- [x] from text\n")
+    assert texts(load_facts(root=tmp_path)) == ["from text"]
+
+
+def test_explicit_path_beats_verified_facts_and_jobhunt_facts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_path = tmp_path / "env.md"
+    env_path.write_text("## S\n- [x] from env path\n", encoding="utf-8")
+    explicit = tmp_path / "explicit.md"
+    explicit.write_text("## S\n- [x] explicit\n", encoding="utf-8")
+    monkeypatch.setenv(FACTS_ENV, str(env_path))
+    monkeypatch.setenv(FACTS_TEXT_ENV, "## S\n- [x] from text\n")
+    assert texts(load_facts(explicit)) == ["explicit"]
+
+
+def test_verified_facts_env_drops_unticked_and_conflicts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(
+        FACTS_TEXT_ENV,
+        "## Real\n- [x] kept\n- [ ] unticked\n## Conflicts to resolve\n- [x] ticked conflict\n",
+    )
+    assert texts(load_facts(root=tmp_path)) == ["kept"]
+
+
+@pytest.mark.parametrize("blank", ["", "  ", "\n\t \n"])
+def test_blank_verified_facts_env_is_ignored(
+    blank: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "verified.md").write_text("## S\n- [x] default\n", encoding="utf-8")
+    monkeypatch.setenv(FACTS_TEXT_ENV, blank)
+    assert texts(load_facts(root=tmp_path)) == ["default"]
+
+
+def test_errors_never_echo_the_verified_facts_value(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sentinel = "SENTINEL-do-not-leak-7f3a"
+    monkeypatch.setenv(FACTS_TEXT_ENV, f"## S\n- [x] {sentinel}\n")
+    draft = tmp_path / "verified-draft.md"
+    draft.write_text("## S\n- [x] unconfirmed\n", encoding="utf-8")
+    for bad in (tmp_path / "missing.md", draft):
+        with pytest.raises(FactsNotFound) as info:
+            load_facts(bad)
+        assert sentinel not in str(info.value)
+    # Loaded facts keep their text out of repr too, and the missing-file message names the env var.
+    assert sentinel not in repr(load_facts(root=tmp_path))
+    monkeypatch.setenv(FACTS_TEXT_ENV, " ")
+    with pytest.raises(FactsNotFound) as info:
+        load_facts(root=tmp_path)
+    assert FACTS_TEXT_ENV in str(info.value)
 
 
 def test_facts_not_found_is_a_file_not_found_error() -> None:
