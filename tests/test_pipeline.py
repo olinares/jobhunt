@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import pytest
 import respx
 
 from jobhunt.adapters import ADAPTERS, build_adapters
+from jobhunt.adapters.gem import GRAPHQL_URL as GEM_URL
 from jobhunt.adapters.http import PoliteClient
 from jobhunt.config import ConfigError, load_config
 from jobhunt.models import BoardRef
@@ -186,6 +188,76 @@ def test_relevant_hits_recorded_only_for_boards_with_matches(boards, client, sto
     rows = dict(db_rows(tmp_path / "jobs.db", "SELECT board_key, last_relevant_hit FROM companies"))
     assert rows["lever:zoox"] is None
     assert rows["greenhouse:anthropic"] is not None
+
+
+def test_relevant_jobs_are_stored_with_descriptions(boards, client, store, cfg, tmp_path):
+    run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW)
+
+    rows = db_rows(tmp_path / "jobs.db", "SELECT uid, description_html FROM jobs")
+    assert {uid for uid, _ in rows} == EXPECTED_RELEVANT
+    assert all(html for _, html in rows)
+    # The scorer reads jobs back from the store, descriptions included.
+    assert {job.uid for job in store.jobs_to_score(10) if job.description_html} == (
+        EXPECTED_RELEVANT
+    )
+
+
+def test_listing_payload_descriptions_cost_no_extra_requests(boards, client, store, cfg):
+    run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW)
+
+    for url in (GH_URL, ASHBY_URL, LEVER_URL):
+        assert [str(c.request.url).split("?")[0] for c in boards.calls].count(url) == 1
+
+
+# --- gem: details only for new relevant jobs ---------------------------------------------
+
+GEM_SEED = BoardRef("gem", "gem", company_name="Gem")
+
+
+def gem_handler(request: httpx.Request) -> httpx.Response:
+    details = {
+        item["data"]["oatsExternalJobPosting"]["extId"]: item for item in load("gem_gem_jobs.json")
+    }
+    out = []
+    for op in json.loads(request.content):
+        if op["operationName"] == "JobBoardList":
+            out.append(load("gem_gem_board.json")[0])
+        else:
+            out.append(
+                details.get(op["variables"]["extId"], {"data": {"oatsExternalJobPosting": None}})
+            )
+    return httpx.Response(200, json=out)
+
+
+def detail_ext_ids(route, *, since: int = 0) -> list[list[str]]:
+    batches = [json.loads(call.request.content) for call in list(route.calls)[since:]]
+    return [
+        [op["variables"]["extId"] for op in batch]
+        for batch in batches
+        if batch[0]["operationName"] == "ExternalJobPosting"
+    ]
+
+
+@respx.mock
+def test_gem_details_fetched_only_for_new_relevant_jobs(client, store, cfg, tmp_path):
+    route = respx.post(GEM_URL).mock(side_effect=gem_handler)
+    # No SE/FDE titles on Gem's own board, so match its engineers for this test.
+    cfg = replace(cfg, titles=(*cfg.titles, "software engineer"))
+    adapters = build_adapters(client)
+
+    first = run(store, adapters, cfg, seeds=[GEM_SEED], now=NOW)
+    matched = [job.external_id for job in first.new_jobs]
+    assert matched and len(matched) < 4  # some postings are filtered out
+    assert detail_ext_ids(route) == [matched]  # one batch, relevant jobs only
+    rows = db_rows(tmp_path / "jobs.db", "SELECT description_html FROM jobs")
+    assert rows and all(html for (html,) in rows)
+
+    seen = route.call_count
+    run(store, adapters, cfg, seeds=[GEM_SEED], now=NOW + timedelta(days=1))
+    assert route.call_count == seen + 1  # the listing only
+    assert detail_ext_ids(route, since=seen) == []  # nothing new, no detail requests
+    rows = db_rows(tmp_path / "jobs.db", "SELECT description_html FROM jobs")
+    assert all(html for (html,) in rows)  # re-listing without details keeps them
 
 
 # --- discovery --------------------------------------------------------------------------

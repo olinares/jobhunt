@@ -1,0 +1,52 @@
+name: Daily digest
+
+on:
+  schedule:
+    # 13:30 UTC = 06:30 PDT / 05:30 PST. GitHub may start scheduled runs a few minutes late.
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+
+# Never run two digests at once: a manual run while the scheduled one is going waits for it,
+# so the same jobs can't be scored or emailed twice.
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    # A normal run takes a few minutes: ~1s between requests to each host, one board after
+    # another. But PoliteClient retries timeouts and connection errors with backoff, so one
+    # request to a dead or hanging host can take ~2.75 minutes (5 attempts x 30s timeout plus
+    # 1+2+4+8s of backoff) before that board is marked failed. 45 minutes leaves room for
+    # several of those while still stopping a stuck run long before GitHub's 6-hour default.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install .
+      # Without DATABASE_URL the CLI falls back to a SQLite file that dies with the runner,
+      # and every open job would be emailed as new each morning. Fail loudly instead.
+      - name: Check DATABASE_URL is set
+        run: test -n "$DATABASE_URL" || { echo "::error::secret DATABASE_URL is not set"; exit 1; }
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: jobhunt daily
+        # Just under the job limit, so a hung run fails on this step with its log intact.
+        timeout-minutes: 40
+        run: jobhunt daily
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          RESUME_SE: ${{ secrets.RESUME_SE }}
+          RESUME_FDE: ${{ secrets.RESUME_FDE }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}

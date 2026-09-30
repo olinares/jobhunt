@@ -1,5 +1,10 @@
 """One run of the pipeline: seeds + discovery -> fetch every board -> filter -> store.
 
+Matched jobs are stored with their descriptions, which the scorer needs. Greenhouse, Lever
+and Ashby include them in the listing payload, so they cost nothing extra. Workday and Gem
+need one extra request per posting (Gem: per batch), so those are fetched only for jobs
+that are new and relevant.
+
 Everything with side effects (store, adapters, search client, clock) is passed in, so a
 whole run can be exercised in tests against recorded fixtures.
 """
@@ -14,6 +19,7 @@ from pathlib import Path
 import httpx
 import yaml
 
+from jobhunt.adapters.gem import GemAdapter
 from jobhunt.adapters.workday import WorkdayAdapter
 from jobhunt.config import ConfigError, RolesConfig
 from jobhunt.discovery.queries import build_queries
@@ -21,7 +27,7 @@ from jobhunt.discovery.search import SearchClient, SearchRunReport, run_capped_s
 from jobhunt.discovery.slugs import board_from_url
 from jobhunt.filter import matches
 from jobhunt.models import ATS, Adapter, BoardNotFound, BoardRef, Job
-from jobhunt.store import SqliteStore
+from jobhunt.store import Store
 
 
 @dataclass
@@ -74,7 +80,7 @@ def load_seeds(path: str | Path) -> list[BoardRef]:
 
 
 def discover(
-    store: SqliteStore,
+    store: Store,
     client: SearchClient,
     titles: list[str],
     region_terms: list[str],
@@ -110,7 +116,7 @@ def poll_board(
     board: BoardRef,
     adapter: Adapter,
     cfg: RolesConfig,
-    store: SqliteStore,
+    store: Store,
     *,
     now: datetime,
 ) -> tuple[BoardResult, list[Job], list[Job]]:
@@ -118,7 +124,9 @@ def poll_board(
 
     Returns the board's result, its matched jobs, and the subset that is new.
     """
-    jobs = adapter.fetch(board)
+    # Descriptions are free in greenhouse/lever/ashby listings; workday/gem get them below.
+    detailed = isinstance(adapter, WorkdayAdapter | GemAdapter)
+    jobs = adapter.fetch(board, with_descriptions=not detailed)
     results = {job.uid: matches(job, cfg) for job in jobs}
 
     # Workday lists multi-location jobs as "6 Locations", which leaves no location to match.
@@ -135,6 +143,14 @@ def poll_board(
 
     matched = [job for job in jobs if results[job.uid].matched]
     new_uids = set(store.upsert_jobs(matched, now=now))
+    if detailed:
+        # The store has no read-only "is this uid known?" query, so new-ness comes from the
+        # first upsert; the described jobs are then upserted again. Jobs detailed above for
+        # their locations already have a description and cost no second request.
+        missing = [job for job in matched if job.uid in new_uids and not job.description_html]
+        if missing:
+            adapter.add_details(board, missing)
+            store.upsert_jobs(missing, now=now)
     closed = store.mark_closed(board.key(), {job.uid for job in jobs}, now=now)
     store.upsert_board(board, now=now)
     if matched:
@@ -149,7 +165,7 @@ def poll_board(
 
 
 def run(
-    store: SqliteStore,
+    store: Store,
     adapters: dict[ATS, Adapter],
     cfg: RolesConfig,
     *,

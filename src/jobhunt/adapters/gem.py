@@ -102,10 +102,15 @@ class GemAdapter:
         postings = (data.get("oatsExternalJobPostings") or {}).get("jobPostings") or []
         jobs = [_to_job(board, company, posting) for posting in postings]
         if with_descriptions:
-            self._add_details(board, jobs)
+            self.add_details(board, jobs)
         return jobs
 
-    def _add_details(self, board: BoardRef, jobs: list[Job]) -> None:
+    def add_details(self, board: BoardRef, jobs: list[Job]) -> None:
+        """Fill descriptions (and posted date, department) for `jobs` from `board`.
+
+        Batches up to DETAIL_BATCH_SIZE postings per request. Lets callers fetch details
+        only for the jobs that need them, mirroring `WorkdayAdapter.add_details`.
+        """
         for start in range(0, len(jobs), DETAIL_BATCH_SIZE):
             chunk = jobs[start : start + DETAIL_BATCH_SIZE]
             operations = [
