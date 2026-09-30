@@ -31,6 +31,8 @@ class DigestStats:
     scored: int = 0
     score_failures: int = 0
     boards_failed: int = 0
+    detail_failures: int = 0  # boards whose job descriptions couldn't be fetched
+    discovery: str | None = None  # one line from the caller, e.g. "Discovery: 20 queries, ..."
 
 
 class DigestConfigError(RuntimeError):
@@ -102,8 +104,14 @@ def _footer_lines(stats: DigestStats) -> list[str]:
         f"{stats.scored} scored"
     )
     lines = [summary]
+    if stats.discovery:
+        lines.append(stats.discovery)
     if stats.boards_failed:
         lines.append(f"⚠ {stats.boards_failed} board(s) failed to load")
+    if stats.detail_failures:
+        lines.append(
+            f"⚠ {stats.detail_failures} board(s) couldn't load job details (will retry next run)"
+        )
     if stats.score_failures:
         lines.append(f"⚠ {stats.score_failures} job(s) failed scoring")
     return lines

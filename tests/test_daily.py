@@ -125,11 +125,13 @@ def boards():
         yield router
 
 
-def daily(tmp_path, seeds, *extra: str, db: bool = True) -> int:
+def daily(tmp_path, seeds, *extra: str, db: bool = True, discover: bool = False) -> int:
     args = ["daily", "--config", str(ROOT / "config" / "roles.yaml"), "--seeds", str(seeds)]
     if db:
         args += ["--db", str(tmp_path / "jobs.db")]
-    return cli.main([*args, "--no-discover", *extra])
+    if not discover:
+        args.append("--no-discover")
+    return cli.main([*args, *extra])
 
 
 def digest_text(msg: EmailMessage) -> str:
@@ -231,6 +233,32 @@ def test_every_board_failing_exits_1_but_still_emails(boards, tmp_path, seeds):
     assert daily(tmp_path, seeds) == 1
     (msg,) = FakeSMTP.sent
     assert "2 board(s) failed to load" in digest_text(msg)
+
+
+class FailingSearch:
+    def search(self, query: str, *, count: int = 10) -> list[str]:
+        raise httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=httpx.Request("POST", "https://google.serper.dev/search"),
+            response=httpx.Response(401),
+        )
+
+    def close(self) -> None:
+        pass
+
+
+def test_discovery_status_is_in_the_footer(boards, tmp_path, seeds, monkeypatch):
+    assert daily(tmp_path, seeds) == 0
+    assert "Discovery skipped (--no-discover)" in digest_text(FakeSMTP.sent[-1])
+
+    # No SEARCH_API_KEY (the env fixture removes it): skipped, and the email says why.
+    assert daily(tmp_path, seeds, discover=True) == 0
+    assert "Discovery skipped (SEARCH_API_KEY not set)" in digest_text(FakeSMTP.sent[-1])
+
+    # A rejected key: the run still succeeds, and the failure is in the email.
+    monkeypatch.setattr(cli, "_search_client", lambda err: FailingSearch())
+    assert daily(tmp_path, seeds, discover=True) == 0
+    assert "⚠ Discovery failed: HTTPStatusError: 401 Unauthorized" in digest_text(FakeSMTP.sent[-1])
 
 
 def test_partial_scoring_failure_is_reported_in_the_footer(boards, tmp_path, seeds):

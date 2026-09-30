@@ -188,7 +188,9 @@ def _daily(args: argparse.Namespace, *, out: TextIO, err: TextIO) -> int:
         print(f"Scored {scored} job(s); {len(failures)} failed.", file=err)
 
         items = store.jobs_for_digest()
-        stats = _digest_stats(report, scored=scored, score_failures=len(failures))
+        stats = _digest_stats(
+            report, scored=scored, score_failures=len(failures), no_discover=args.no_discover
+        )
         subject, text, html = render_digest(items, day=datetime.now(DIGEST_TZ).date(), stats=stats)
 
         if args.dry_run:
@@ -220,7 +222,7 @@ def _require_env(names: list[str]) -> None:
 
 def _score(store: Store, resumes: Resumes, *, limit: int) -> tuple[int, list[tuple[str, str]]]:
     """Score up to `limit` unscored jobs and save each score. Returns (saved, failures)."""
-    jobs = store.jobs_to_score(limit)
+    jobs = store.jobs_to_score(limit, now=datetime.now(UTC))
     if not jobs:
         return 0, []
     scores, failures = score_many(anthropic_client(), jobs, resumes)
@@ -230,7 +232,9 @@ def _score(store: Store, resumes: Resumes, *, limit: int) -> tuple[int, list[tup
     return len(scores), failures
 
 
-def _digest_stats(report: RunReport, *, scored: int, score_failures: int) -> DigestStats:
+def _digest_stats(
+    report: RunReport, *, scored: int, score_failures: int, no_discover: bool = False
+) -> DigestStats:
     return DigestStats(
         boards_polled=len(report.boards),
         jobs_fetched=sum(b.fetched for b in report.boards),
@@ -240,6 +244,24 @@ def _digest_stats(report: RunReport, *, scored: int, score_failures: int) -> Dig
         scored=scored,
         score_failures=score_failures,
         boards_failed=len(report.failed),
+        detail_failures=len(report.detail_failures),
+        discovery=_discovery_line(report, no_discover=no_discover),
+    )
+
+
+def _discovery_line(report: RunReport, *, no_discover: bool) -> str:
+    """One footer line saying what discovery did, so a dead search key shows up in the email."""
+    if report.search_error:
+        return f"⚠ Discovery failed: {report.search_error}"
+    if report.search is None:
+        reason = "--no-discover" if no_discover else "SEARCH_API_KEY not set"
+        return f"Discovery skipped ({reason})"
+    capped = (
+        f", {report.search.queries_skipped} left for later runs" if report.search.capped else ""
+    )
+    return (
+        f"Discovery: {report.search.queries_run} queries{capped}; "
+        f"{len(report.discovered)} new board(s)"
     )
 
 
@@ -282,6 +304,10 @@ def format_summary(report: RunReport, *, shown: int, all_jobs: bool) -> str:
         lines.append(f"Pruned {len(report.pruned)} board(s): {', '.join(report.pruned)}")
     for result in report.failed:
         lines.append(f"Failed {result.board.key()}: {result.error}")
+    for result in report.detail_failures:
+        lines.append(
+            f"Details failed {result.board.key()} (retried next run): {result.detail_error}"
+        )
     return "\n".join(lines)
 
 

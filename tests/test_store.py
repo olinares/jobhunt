@@ -519,6 +519,33 @@ def test_jobs_to_score_is_oldest_first_limited_and_skips_ineligible(store):
     assert [j.uid for j in store.jobs_to_score(2)] == [oldest.uid, middle.uid]
 
 
+def test_uids_missing_description_lists_open_jobs_without_one(store):
+    described = make_job(external_id="1", description_html="<p>JD</p>")
+    bare = make_job(external_id="2")
+    closed = make_job(external_id="3")
+    store.upsert_jobs([described, bare, closed], now=NOW)
+    store.mark_closed(ACME.key(), {described.uid, bare.uid}, now=NOW)
+
+    asked = [described.uid, bare.uid, closed.uid, "greenhouse:acme:unknown"]
+    assert store.uids_missing_description(asked) == {bare.uid}
+    assert store.uids_missing_description([]) == set()
+
+
+def test_jobs_to_score_holds_undescribed_jobs_until_the_grace_period_ends(store):
+    described = make_job(external_id="1", description_html="<p>JD</p>")
+    bare = make_job(external_id="2")
+    store.upsert_jobs([described, bare], now=NOW)
+
+    same_day = store.jobs_to_score(10, now=NOW + timedelta(hours=1))
+    assert [j.uid for j in same_day] == [described.uid]
+
+    later = store.jobs_to_score(10, now=NOW + timedelta(days=2))
+    assert [j.uid for j in later] == [described.uid, bare.uid]
+
+    no_wait = store.jobs_to_score(10, now=NOW, description_grace=timedelta(0))
+    assert [j.uid for j in no_wait] == [described.uid, bare.uid]
+
+
 def test_save_score_round_trips(store):
     job = make_job()
     store.upsert_jobs([job], now=NOW)

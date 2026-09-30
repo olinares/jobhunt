@@ -107,6 +107,22 @@ def test_footer_reports_failures_only_when_present():
     assert "1 job(s) failed scoring" in html
 
 
+def test_footer_shows_discovery_line_and_detail_failures():
+    _, healthy, _ = render_digest(fixture(), day=DAY, stats=STATS)
+    assert "Discovery" not in healthy and "job details" not in healthy
+
+    stats = DigestStats(
+        boards_polled=40,
+        detail_failures=1,
+        discovery="⚠ Discovery failed: HTTPStatusError: 401 <Unauthorized>",
+    )
+    _, text, html = render_digest(fixture(), day=DAY, stats=stats)
+    assert "⚠ Discovery failed: HTTPStatusError: 401 <Unauthorized>" in text
+    assert "Discovery failed: HTTPStatusError: 401 &lt;Unauthorized&gt;" in html
+    assert "1 board(s) couldn't load job details (will retry next run)" in text
+    assert "job details" in html
+
+
 def test_rendered_text_sample(capsys):
     _, text, _ = render_digest(fixture(), day=DAY, stats=STATS)
     print(text)
