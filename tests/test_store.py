@@ -661,3 +661,156 @@ def test_prune_boards_removes_digest_items_of_pruned_jobs(store):
 
     assert store.digest_uid(digest_id, 1) is None
     assert store.latest_digest_id() == digest_id
+
+
+# -- read queries (MCP server) --------------------------------------------
+
+
+def seed_jobs(store):
+    """Four jobs on ACME: two scored (se 80, fde 60), one unscored, one closed+applied."""
+    jobs = [
+        make_job(external_id="1", title="Solutions Engineer", remote=True),
+        make_job(external_id="2", title="Forward Deployed Engineer", remote=False),
+        make_job(external_id="3", title="Account Executive"),
+        make_job(external_id="4", title="Support Engineer", company="Globex"),
+    ]
+    store.upsert_jobs(jobs, now=NOW)
+    store.save_score(jobs[0].uid, Score(80, "se", "Great."), now=NOW)
+    store.save_score(jobs[1].uid, Score(60, "fde", "Ok."), now=NOW)
+    store.save_score(jobs[3].uid, Score(90, "se", "Best."), now=NOW)
+    store.set_status(jobs[3].uid, "applied")
+    store.mark_closed(ACME.key(), {j.uid for j in jobs[:3]}, now=NOW)
+    return jobs
+
+
+def uids(records):
+    return [r.job.uid for r in records]
+
+
+def test_get_job_returns_record_and_none_for_unknown(store):
+    job = make_job(pay_min=100.0, locations=["Remote"])
+    store.upsert_jobs([job], now=NOW)
+    store.save_score(job.uid, Score(75, "fde", "Nice.", pay_suspect=True), now=NOW)
+    record = store.get_job(job.uid)
+    assert record.job == job
+    assert record.score == Score(75, "fde", "Nice.", pay_suspect=True)
+    assert record.status == "new"
+    assert record.first_seen == NOW
+    assert record.closed_at is None
+    assert store.get_job("greenhouse:acme:nope") is None
+
+
+def test_get_job_unscored_has_no_score(store):
+    job = make_job()
+    store.upsert_jobs([job], now=NOW)
+    assert store.get_job(job.uid).score is None
+
+
+def test_get_job_closed_keeps_closed_at(store):
+    job = make_job()
+    store.upsert_jobs([job], now=NOW)
+    store.mark_closed(ACME.key(), set(), now=NOW + timedelta(days=1))
+    record = store.get_job(job.uid)
+    assert record.closed_at == NOW + timedelta(days=1)
+    assert record.status == "closed"
+
+
+def test_search_jobs_orders_by_score_with_unscored_last(store):
+    jobs = seed_jobs(store)
+    records = store.search_jobs(include_closed=True)
+    assert uids(records) == [jobs[3].uid, jobs[0].uid, jobs[1].uid, jobs[2].uid]
+    assert records[-1].score is None
+
+
+def test_search_jobs_hides_closed_by_default(store):
+    jobs = seed_jobs(store)
+    assert uids(store.search_jobs()) == [jobs[0].uid, jobs[1].uid, jobs[2].uid]
+
+
+def test_search_jobs_query_is_case_insensitive_on_title_and_company(store):
+    jobs = seed_jobs(store)
+    assert uids(store.search_jobs(query="SOLUTIONS")) == [jobs[0].uid]
+    assert uids(store.search_jobs(query="globex", include_closed=True)) == [jobs[3].uid]
+
+
+def test_search_jobs_query_wildcards_match_literally(store):
+    store.upsert_jobs(
+        [
+            make_job(external_id="1", title="100% Remote SE"),
+            make_job(external_id="2", title="SE_Lead"),
+            make_job(external_id="3", title="Plain SE"),
+            make_job(external_id="4", title="Wow! Engineer"),
+        ],
+        now=NOW,
+    )
+    assert uids(store.search_jobs(query="100%")) == [f"{ACME.key()}:1"]
+    assert uids(store.search_jobs(query="e_l")) == [f"{ACME.key()}:2"]
+    assert uids(store.search_jobs(query="wow!")) == [f"{ACME.key()}:4"]
+    assert store.search_jobs(query="%") != store.search_jobs()  # not a wildcard
+
+
+def test_search_jobs_filters_alone(store):
+    jobs = seed_jobs(store)
+    assert uids(store.search_jobs(min_score=70)) == [jobs[0].uid]
+    assert uids(store.search_jobs(variant="fde")) == [jobs[1].uid]
+    assert uids(store.search_jobs(remote=True)) == [jobs[0].uid]
+    assert uids(store.search_jobs(remote=False)) == [jobs[1].uid]
+    assert uids(store.search_jobs(statuses=["applied"], include_closed=True)) == [jobs[3].uid]
+    assert uids(store.search_jobs(limit=1)) == [jobs[0].uid]
+
+
+def test_search_jobs_filters_combined(store):
+    jobs = seed_jobs(store)
+    found = store.search_jobs(
+        query="engineer", min_score=50, variant="se", statuses=["new", "applied"],
+        include_closed=True,
+    )  # fmt: skip
+    assert uids(found) == [jobs[3].uid, jobs[0].uid]
+    assert store.search_jobs(query="engineer", variant="fde", remote=True) == []
+
+
+def test_search_jobs_closed_posting_keeps_applied_status_in_pipeline_view(store):
+    jobs = seed_jobs(store)
+    [record] = store.search_jobs(statuses=["applied"], include_closed=True)
+    assert record.job.uid == jobs[3].uid
+    assert record.status == "applied"
+    assert record.closed_at == NOW
+    assert store.search_jobs(statuses=["applied"]) == []
+
+
+def test_search_jobs_statuses_empty_and_invalid(store):
+    seed_jobs(store)
+    assert store.search_jobs(statuses=[]) == []
+    assert store.search_jobs(statuses=set()) == []
+    with pytest.raises(ValueError):
+        store.search_jobs(statuses=["new", "bogus"])
+
+
+def test_list_boards_ordered_by_key_with_full_board_ref(store):
+    workday = BoardRef("workday", "acme", host="acme.wd5.myworkdayjobs.com", site="Careers")
+    store.upsert_board(workday, now=NOW)
+    store.upsert_board(ACME, now=NOW + timedelta(days=1))
+    store.record_relevant_hits(ACME.key(), 2, when=NOW + timedelta(days=2))
+    records = store.list_boards()
+    assert [r.board for r in records] == sorted([ACME, workday], key=lambda b: b.key())
+    by_ats = {r.board.ats: r for r in records}
+    assert by_ats["workday"].board.host == "acme.wd5.myworkdayjobs.com"
+    assert by_ats["workday"].board.site == "Careers"
+    assert by_ats["workday"].last_relevant_hit is None
+    assert by_ats["greenhouse"].first_seen == NOW + timedelta(days=1)
+    assert by_ats["greenhouse"].last_checked == NOW + timedelta(days=1)
+    assert by_ats["greenhouse"].last_relevant_hit == NOW + timedelta(days=2)
+
+
+def test_list_boards_empty(store):
+    assert store.list_boards() == []
+
+
+def test_digest_items_in_order_and_empty(store):
+    jobs = [make_job(external_id=str(i)) for i in range(3)]
+    store.upsert_jobs(jobs, now=NOW)
+    order = [jobs[2].uid, jobs[0].uid, jobs[1].uid]
+    digest_id = store.record_digest(order, now=NOW)
+    assert store.digest_items(digest_id) == [(1, order[0]), (2, order[1]), (3, order[2])]
+    assert store.digest_items(store.record_digest([], now=NOW)) == []
+    assert store.digest_items(9999) == []
