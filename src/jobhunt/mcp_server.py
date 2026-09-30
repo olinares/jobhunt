@@ -1,7 +1,8 @@
-"""Local MCP server: the job store, pipeline and application packet as Claude tools.
+"""MCP server: the job store, pipeline and application packet as Claude tools.
 
-Run it with `jobhunt-mcp --root /path/to/jobhunt` (stdio). `create_server` builds the server
-with every side effect injected, so tests run it in memory against a SQLite file.
+Run it locally with `jobhunt-mcp --root /path/to/jobhunt` (stdio). `create_server` builds the
+server with every side effect injected, so tests run it in memory against a SQLite file. The
+hosted server is the same one over Streamable HTTP, behind the OAuth in `jobhunt.auth`.
 
 Two rules shape the code:
 
@@ -25,10 +26,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import anyio
 import httpx
+from mcp.server.auth.provider import OAuthAuthorizationServerProvider
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from jobhunt.adapters import build_adapters
@@ -61,7 +66,8 @@ DESCRIPTION_PREVIEW = 1500
 
 FACTS_HINT = (
     f"Fill in {DEFAULT_FACTS_PATH} (format: facts/verified.example.md) and tick [x] only the "
-    "facts you would defend, then try again."
+    "facts you would defend, then try again. On the hosted server the same text goes in the "
+    "VERIFIED_FACTS secret."
 )
 
 StoreFactory = Callable[[], Store]
@@ -216,6 +222,12 @@ def create_server(
     facts_path: Path | None = None,
     search_client_factory: SearchClientFactory | None = None,
     adapters: Mapping[ATS, Adapter] | None = None,
+    auth_provider: OAuthAuthorizationServerProvider[Any, Any, Any] | None = None,
+    auth_settings: AuthSettings | None = None,
+    transport_security: TransportSecuritySettings | None = None,
+    host: str = "127.0.0.1",
+    stateless_http: bool = False,
+    json_response: bool = False,
 ) -> FastMCP:
     """Build the jobhunt MCP server.
 
@@ -224,6 +236,13 @@ def create_server(
     `$JOBHUNT_FACTS`, else `<root>/private/verified.md`). Without `search_client_factory`
     discovery uses `SerperClient`; without `adapters` each refresh builds real ones around a
     fresh `PoliteClient`.
+
+    The remaining arguments go straight to `FastMCP` and only matter for the Streamable HTTP
+    app; the defaults are the SDK's, so stdio is unchanged. For the hosted server pass the
+    OAuth provider and settings from `jobhunt.auth`, `stateless_http=True` and
+    `json_response=True` (several instances, scale to zero: no in-memory sessions), and
+    `transport_security` naming the public host. With the default `host` the SDK allows only
+    localhost Host headers on `/mcp`.
     """
     root = Path(root)
     make_search = search_client_factory or SerperClient
@@ -235,6 +254,12 @@ def create_server(
             "digest), digest#number (12#3) or uid. Applications may only use verified facts; "
             "Oz reviews and submits every application himself."
         ),
+        auth_server_provider=auth_provider,
+        auth=auth_settings,
+        transport_security=transport_security,
+        host=host,
+        stateless_http=stateless_http,
+        json_response=json_response,
     )
 
     def roles() -> RolesConfig:
