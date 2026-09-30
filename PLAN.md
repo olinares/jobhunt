@@ -4,7 +4,8 @@ Every phase ships as pull requests (see Git workflow in CLAUDE.md). Oz merges.
 
 ## Phase 0 — Inputs (Oz)
 - Confirm titles, exclusions and regions in `config/roles.yaml` (regions default: Bay Area + Remote-US).
-- Finish the resume verify checklist and fill `facts/verified.md`.
+- Finish the resume verify checklist: tick what you'd defend in gitignored `private/verified.md`
+  (format: `facts/verified.example.md`). The repo is public, so real facts never get committed.
 
 ## Phase 1 — Fetcher  ← Wave 1 (parallel)
 Adapters for Greenhouse, Lever, Ashby, Workday, Gem; normalize to `Job`; title + region filter;
@@ -32,9 +33,17 @@ Runs in the cloud: GitHub Actions cron → Neon Postgres → Gmail SMTP. Resume 
 
 ## Phase 4 — MCP server (local)
 Tools: search_jobs, get_job, discover_companies, refresh_boards, update_status, build_packet, list_pipeline.
-Resources: roles.yaml, facts/verified.md, company registry. Prompts: morning triage, prep application.
-Approvals by chat ("approve 3 and 7"). Claude in Chrome fills forms; Oz submits.
+Resources: roles.yaml, verified facts (ticked items only), company registry. Prompts: morning triage, prep application.
+Approvals by chat ("approve 3 and 7"), resolved against the latest digest's numbers. Claude in Chrome fills forms; Oz submits.
 Done when: one real application goes from digest to submitted.
+
+Local stdio server (FastMCP) over the same Neon database the daily digest writes. Verified facts live in
+gitignored `private/verified.md`; only `[x]` items are loaded, and the Conflicts section never is.
+`build_packet` is deterministic (no LLM call): job, description, resume variant, ticked facts, rules.
+The chat model drafts from it.
+- Wave 4a (parallel): J store read queries (agents/J-store-queries.md), K verified facts + packet
+  (agents/K-facts-packet.md). No shared files.
+- Wave 4b (after 4a merges): L MCP server (agents/L-mcp-server.md).
 
 ## Phase 5 — Remote + portfolio
 Deploy (Streamable HTTP), add as a custom connector, one-tap Approve/Skip links in the email,
