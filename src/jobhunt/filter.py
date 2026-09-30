@@ -43,9 +43,10 @@ _SENIORITY_VOCAB = frozenset(
 # (e.g. "Solutions Engineer Manager", "Solutions Engineer Head").
 # config/roles.yaml's `exclude_title_terms` excludes "manager of" and bare
 # "director"/"vp" (which already catch those words anywhere in the title);
-# this closes the remaining gap for a bare trailing "Manager"/"Head"/"Lead"
-# that isn't spelled "manager of ...". See the PR's "Flags for review".
-_SUFFIX_DISQUALIFIERS = frozenset({"manager", "head", "lead"})
+# this closes the remaining gap for a bare trailing "Manager"/"Head" that isn't
+# spelled "manager of ...". A trailing "Lead" is allowed: "Solutions Engineer Lead"
+# is usually a senior IC role, same as "Lead Solutions Engineer".
+_SUFFIX_DISQUALIFIERS = frozenset({"manager", "head"})
 
 
 @dataclass(frozen=True)
