@@ -23,6 +23,13 @@ Haiku scores each new job against the resumes and picks SE vs FDE version; hoste
 GitHub Actions cron; numbered email digest.
 Done when: the digest arrives every morning untouched.
 
+Runs in the cloud: GitHub Actions cron → Neon Postgres → Gmail SMTP. Resume text stays private
+(gitignored `private/resumes/`, GitHub secrets in CI).
+- Wave 3a (parallel): F Postgres store (agents/F-postgres-store.md), G scorer (agents/G-scorer.md),
+  H digest (agents/H-digest.md), plus `fix/http-retry-timeouts` (PoliteClient retries timeouts and
+  connection errors). F and G both add a dependency to pyproject.toml; the second to merge rebases.
+- Wave 3b (after 3a merges): I `jobhunt daily` + daily.yml (agents/I-daily-integration.md).
+
 ## Phase 4 — MCP server (local)
 Tools: search_jobs, get_job, discover_companies, refresh_boards, update_status, build_packet, list_pipeline.
 Resources: roles.yaml, facts/verified.md, company registry. Prompts: morning triage, prep application.
