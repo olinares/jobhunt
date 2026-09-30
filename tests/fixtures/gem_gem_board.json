@@ -1,0 +1,115 @@
+[
+  {
+    "data": {
+      "oatsExternalJobPostings": {
+        "jobPostings": [
+          {
+            "id": "T2F0c0pvYlBvc3Q6MTExOTE=",
+            "extId": "4965519002",
+            "title": "Software Engineer",
+            "locations": [
+              {
+                "id": "4514",
+                "name": "San Francisco",
+                "city": "San Francisco",
+                "isoCountry": "USA",
+                "isRemote": false,
+                "extId": "4010840002"
+              }
+            ],
+            "job": {
+              "id": "T2F0c0pvYjoxNjQzMA==",
+              "department": {
+                "id": "3824",
+                "name": "Engineering",
+                "extId": "4022145002"
+              },
+              "locationType": "HYBRID",
+              "employmentType": "FULL_TIME"
+            }
+          },
+          {
+            "id": "T2F0c0pvYlBvc3Q6Mjc2NDA4Ng==",
+            "extId": "am9icG9zdDqTzmNGwXTdU65YRLOAU6ZL",
+            "title": "Senior Software Engineer - Core ATS",
+            "locations": [
+              {
+                "id": "4514",
+                "name": "San Francisco",
+                "city": "San Francisco",
+                "isoCountry": "USA",
+                "isRemote": false,
+                "extId": "4010840002"
+              }
+            ],
+            "job": {
+              "id": "T2F0c0pvYjoxOTUxNzk3",
+              "department": {
+                "id": "3824",
+                "name": "Engineering",
+                "extId": "4022145002"
+              },
+              "locationType": "HYBRID",
+              "employmentType": "FULL_TIME"
+            }
+          },
+          {
+            "id": "T2F0c0pvYlBvc3Q6Mzk2ODEzMw==",
+            "extId": "am9icG9zdDqbFFvbAtTFWyEIqIoh7MQe",
+            "title": "Product Manager ",
+            "locations": [
+              {
+                "id": "4514",
+                "name": "San Francisco",
+                "city": "San Francisco",
+                "isoCountry": "USA",
+                "isRemote": false,
+                "extId": "4010840002"
+              }
+            ],
+            "job": {
+              "id": "T2F0c0pvYjozMDkwNzMz",
+              "department": {
+                "id": "68",
+                "name": "Product",
+                "extId": "4022148002"
+              },
+              "locationType": "IN_OFFICE",
+              "employmentType": "FULL_TIME"
+            }
+          },
+          {
+            "id": "T2F0c0pvYlBvc3Q6NDQxODYyMQ==",
+            "extId": "am9icG9zdDoxt66pB6mvVDH0kCIS4bLF",
+            "title": "Engineering Manager (AI Products)",
+            "locations": [
+              {
+                "id": "4514",
+                "name": "San Francisco",
+                "city": "San Francisco",
+                "isoCountry": "USA",
+                "isRemote": false,
+                "extId": "4010840002"
+              }
+            ],
+            "job": {
+              "id": "T2F0c0pvYjozNTM0Nzg2",
+              "department": {
+                "id": "3824",
+                "name": "Engineering",
+                "extId": "4022145002"
+              },
+              "locationType": "HYBRID",
+              "employmentType": "FULL_TIME"
+            }
+          }
+        ]
+      },
+      "jobBoardExternal": {
+        "id": "RXh0ZXJuYWxKb2JCb2FyZDox",
+        "teamDisplayName": "Gem",
+        "pageTitle": "Gem Jobs"
+      }
+    }
+  }
+]

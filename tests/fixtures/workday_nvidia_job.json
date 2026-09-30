@@ -1,0 +1,85 @@
+{
+  "jobPostingInfo": {
+    "id": "40d08b363b171000c36326d1272a0000",
+    "title": "Senior Solutions Architect, Ethernet Networking - NVIS",
+    "jobDescription": "<p><span>As a key member of the NVIDIA Infrastructure Specialists Solutions Architecture team, your role involves spearheading the conception, development, and execution of ground-breaking data center networks for NVIDIA customers under the Plan, Design, &amp; Implement (PDI) framework. You will play an important role in advancing comprehensive technology solutions for our strategic clientele in web2.0, cloud, HPC AI, and enterprise datacenter domains. Additionally, you will be tasked with identifying areas for improvement in business technology, providing valuable insights, and furnishing recommendations to both marketing and engineering teams to improve our overall product strategy.</span></p><p></p><p><span><b>What you&#39;ll be doing:</b></span></p><ul><li><p>Providing Ethernet and routing expertise to customers during project delivery to design, architect, configure and test Ethernet networking solutions</p></li><li><p>Work in multi-functional teams to provide Ethernet networking expertise to server infrastructure builds, accelerated computing workloads and GPU enabled AI applications</p></li><li><p>Crafting and evaluating DevOps automation scripts for network operations, designing architectures, and developing switch fabric configurations.</p></li><li><p>Implementing tasks related to network configuration and validation for data centers.</p></li><li><p>Create Methods of Procedure and deployment documents</p></li><li><p>Validate network architectures and configs in the lab</p></li><li><p>Create network automation scripts and customize them to specific customers&#39; needs utilizing AI tools</p></li><li><p>Interact directly with customers to obtain required information to design and build optimal solutions</p></li><li><p>Use software tools to validate and monitor network performance</p></li><li><p>Create project documents to hand over to the customer upon project completion</p></li><li><p>Travel onsite to the customers&#39; data Centers to perform initial configuration work</p></li></ul><p></p><p><span><b>What we need to see:</b></span></p><ul><li><p>Bachelor&#39;s degree in Engineering, Computer Science, Mathematics, Physics, or equivalent experience, with 10&#43; years of expertise in networking fundamentals including TCP/IP, Switching, Routing, and data center architecture.</p></li><li><p>5&#43; years of hands-on experience designing and building network fabrics for scalable data center compute clusters, including CLOS and spine-leaf architectures.</p></li><li><p>Expert-level proficiency in BGP, VxLAN, and EVPN for network design and troubleshooting (5&#43; years), with strong overall Ethernet/TCP/IP switching and routing experience (10&#43; years).</p></li><li><p>Advanced network troubleshooting skills using packet sniffers and analysis tools (8&#43; years).</p></li><li><p>Strong Linux administration background including kernel drivers, PCIe devices, system-level diagnostics, and computer hardware architecture (6&#43; years).</p></li><li><p>Experience with High Performance Compute (HPC) network storage technologies and the ability to simulate and validate customer network topologies in lab environments.</p></li><li><p>6&#43; years of direct customer-facing experience in network requirement gathering, analysis, project planning, and deployment, with 4&#43; years in consulting or technical support roles.</p></li><li><p>Proficiency in network automation using Ansible, Salt, and Python scripting (3&#43; years).</p></li><li><p>Excellent communication and presentation skills in English, with the ability to convey complex technical concepts to both internal and external stakeholders.</p></li><li><p>Self-motivated team player capable of independently prioritizing tasks, with willingness to travel domestically and internationally up to 25% and work non-standard hours as needed.</p></li></ul><p></p><p><span><b>Ways to stand out from the crowd:</b></span></p><ul><li><p>Demonstrate strong social and collaboration skills as well as accountability for results.</p></li><li><p>Experience with Kubernetes and Docker</p></li><li><p>Familiarity with networking simulations tools, experience with NVIDIA Air, GNS3, EVE-NG</p></li><li><p>Experience with network and server management tools like Grafana, Prometheus, Datadog, etc.</p></li><li><p>Personal Git repository with examples of coding expertise in Python and experience with AI tools to boost work quality and meet project timelines</p></li></ul><p></p><p><span>NVIDIA is widely considered to be one of the technology world’s most desirable employers! We have some of the most forward-thinking and hardworking individuals in the world working for us. If you&#39;re creative and autonomous, we want to hear from you!</span></p><p></p><p><span>#BuildTheAIFactory</span></p><p style=\"text-align:inherit\"></p><p style=\"text-align:inherit\"></p>Your base salary will be determined based on your location, experience, and the pay of employees in similar positions. The base salary range is 148,000 USD - 235,750 USD for Level 4, and 184,000 USD - 287,500 USD for Level 5.<div><div><div><div><div><div><div><p></p><p><span>You will also be eligible for equity and <a href=\"https://www.nvidia.com/en-us/benefits/\" target=\"_blank\">benefits</a>.</span></p><p></p></div></div></div></div></div></div></div>Applications for this job will be accepted at least until September 22, 2026.<p></p><p>This posting is for an existing vacancy. </p><p>NVIDIA uses AI tools in its recruiting processes.</p><p></p>NVIDIA is committed to fostering an inclusive work environment and proud to be an equal opportunity employer. As we highly value diversity in our current and future employees, we do not discriminate (including in our hiring and promotion practices) on the basis of race, religion, color, national origin, gender, gender expression, sexual orientation, age, marital status, veteran status, disability status or any other characteristic protected by law.<p style=\"text-align:inherit\"></p><p style=\"text-align:inherit\"></p>",
+    "location": "US, VA, Remote",
+    "additionalLocations": [
+      "US, TX, Remote",
+      "US, NY, Remote",
+      "US, PA, Remote",
+      "US, NJ, Remote",
+      "US, SC, Remote"
+    ],
+    "postedOn": "Posted 11 Days Ago",
+    "startDate": "2026-09-18",
+    "timeType": "Full time",
+    "jobReqId": "JR2016460",
+    "jobPostingId": "Senior-Solutions-Architect--Ethernet-Networking---NVIS_JR2016460",
+    "jobPostingSiteId": "NVIDIAExternalCareerSite",
+    "country": {
+      "descriptor": "United States of America",
+      "id": "bc33aa3152ec42d4995f4791a106ed09"
+    },
+    "canApply": true,
+    "posted": true,
+    "includeResumeParsing": true,
+    "jobRequisitionLocation": {
+      "descriptor": "US, VA, Remote",
+      "country": {
+        "descriptor": "United States of America",
+        "id": "bc33aa3152ec42d4995f4791a106ed09",
+        "alpha2Code": "US"
+      }
+    },
+    "externalUrl": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-VA-Remote/Senior-Solutions-Architect--Ethernet-Networking---NVIS_JR2016460",
+    "questionnaireId": "028095df097b1001ac9358c586600000"
+  },
+  "hiringOrganization": {
+    "name": "2100 NVIDIA USA",
+    "url": ""
+  },
+  "similarJobs": [
+    {
+      "title": "Senior Solutions Architect, First Time Deployment Networking Spectrum-X - NVIS",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Solutions-Architect--First-Time-Deployment-Networking-Spectrum-X---NVIS_JR2021238",
+      "timeType": "Full time",
+      "locationsText": "4 Locations",
+      "postedOn": "Posted 30+ Days Ago",
+      "startDate": "2026-07-13"
+    },
+    {
+      "title": "Senior Solutions Architect, AI Infrastructure Enterprise ISVs",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Solutions-Architect--AI-Infrastructure-Enterprise-ISVs_JR2021244",
+      "timeType": "Full time",
+      "locationsText": "5 Locations",
+      "postedOn": "Posted 30+ Days Ago",
+      "startDate": "2026-07-16"
+    },
+    {
+      "title": "Senior Solutions Architect, First Time Deployment Validation - NVIS",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Solutions-Architect--First-Time-Deployment-Validation---NVIS_JR2021226",
+      "timeType": "Full time",
+      "locationsText": "4 Locations",
+      "postedOn": "Posted 12 Days Ago",
+      "startDate": "2026-09-17"
+    },
+    {
+      "title": "Senior Solutions Architect, First Time Deployment Networking InfiniBand - NVIS",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Solutions-Architect--First-Time-Deployment-Networking-InfiniBand---NVIS_JR2021241",
+      "timeType": "Full time",
+      "locationsText": "4 Locations",
+      "postedOn": "Posted 12 Days Ago",
+      "startDate": "2026-09-17"
+    },
+    {
+      "title": "Senior Solutions Architect, First Time Deployment HW/MEP - NVIS",
+      "externalPath": "/job/US-CA-Santa-Clara/Senior-Solutions-Architect--First-Time-Deployment-HW-MEP---NVIS_JR2021243",
+      "timeType": "Full time",
+      "locationsText": "4 Locations",
+      "postedOn": "Posted 30+ Days Ago",
+      "startDate": "2026-07-14"
+    }
+  ],
+  "userAuthenticated": false
+}
