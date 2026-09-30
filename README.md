@@ -19,7 +19,7 @@ pytest -q
    when `SEARCH_API_KEY` is set, then fetch every known board and keep the relevant jobs.
    Descriptions are stored with them: free for Greenhouse, Lever and Ashby (they come with
    the listing), and fetched only for new relevant jobs on Workday and Gem.
-2. **Score.** Up to `--max-score` (default 100) unscored jobs go to Claude Haiku, which
+2. **Score.** Up to `--max-score` (default 300) unscored jobs go to Claude Haiku, which
    returns a 0–100 fit, the resume version to send (SE or FDE) and a one-line reason.
    Jobs over the cap, or whose scoring failed, wait for the next run.
 3. **Email.** Every scored job not yet in a digest is ranked and numbered, and sent over

@@ -30,7 +30,7 @@ from jobhunt.scoring import ResumeNotFound, Resumes, load_resumes, score_many
 from jobhunt.store import Store, open_store
 
 DEFAULT_REGION_TERMS = ["San Francisco", "Remote"]
-DEFAULT_MAX_SCORE = 100
+DEFAULT_MAX_SCORE = 300
 # Polling stops starting new boards after this many minutes, so scoring and the email always
 # fit in the workflow's 45-minute limit. Boards left over go first on the next run.
 DEFAULT_DAILY_TIME_BUDGET = 30.0
