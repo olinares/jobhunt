@@ -21,8 +21,10 @@ jobs:
     # A normal run takes a few minutes: ~1s between requests to each host, one board after
     # another. But PoliteClient retries timeouts and connection errors with backoff, so one
     # request to a dead or hanging host can take ~2.75 minutes (5 attempts x 30s timeout plus
-    # 1+2+4+8s of backoff) before that board is marked failed. 45 minutes leaves room for
-    # several of those while still stopping a stuck run long before GitHub's 6-hour default.
+    # 1+2+4+8s of backoff) before that board is marked failed. Boards on different hosts are
+    # polled in parallel (8 at a time), and `jobhunt daily` stops starting new boards after a
+    # 30-minute budget (--time-budget), so scoring and the email always fit in 45 minutes;
+    # boards left over go first the next morning.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

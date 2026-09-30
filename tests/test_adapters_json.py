@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import copy
 import json
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -405,3 +407,45 @@ def test_adapters_propagate_non_404_errors():
     respx.get(ASHBY_URL).respond(403)
     with pytest.raises(httpx.HTTPStatusError):
         AshbyAdapter(fast_client()).fetch(AB_BOARD)
+
+
+def _concurrency_probe(hold: float):
+    """A MockTransport handler that tracks how many requests are in flight per host."""
+    lock = threading.Lock()
+    in_flight: dict[str, int] = {}
+    peak: dict[str, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        with lock:
+            in_flight[host] = in_flight.get(host, 0) + 1
+            peak[host] = max(peak.get(host, 0), in_flight[host])
+            peak["*"] = max(peak.get("*", 0), sum(in_flight.values()))
+        time.sleep(hold)
+        with lock:
+            in_flight[host] -= 1
+        return httpx.Response(200, json={})
+
+    return handler, peak
+
+
+def _run_threads(client: PoliteClient, urls: list[str]) -> None:
+    threads = [threading.Thread(target=client.get_json, args=(url,)) for url in urls]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+
+def test_one_request_at_a_time_per_host_across_threads():
+    handler, peak = _concurrency_probe(hold=0.05)
+    with PoliteClient(transport=httpx.MockTransport(handler), min_interval=0) as client:
+        _run_threads(client, ["https://a.example/1", "https://a.example/2", "https://a.example/3"])
+    assert peak["a.example"] == 1
+
+
+def test_different_hosts_proceed_in_parallel():
+    handler, peak = _concurrency_probe(hold=0.2)
+    with PoliteClient(transport=httpx.MockTransport(handler), min_interval=0) as client:
+        _run_threads(client, ["https://a.example/1", "https://b.example/1"])
+    assert peak["*"] == 2

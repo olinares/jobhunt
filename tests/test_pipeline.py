@@ -182,6 +182,52 @@ def test_unexpected_error_on_one_board_does_not_stop_the_run(boards, client, sto
     assert len(report.boards) == 4
 
 
+def summary(report) -> list[tuple]:
+    return [(b.board.key(), b.fetched, b.matched, b.new, b.closed, b.error) for b in report.boards]
+
+
+def test_parallel_run_matches_sequential_run(boards, client, cfg, tmp_path):
+    with SqliteStore(tmp_path / "seq.db") as seq_store, SqliteStore(tmp_path / "par.db") as par:
+        sequential = run(seq_store, build_adapters(client), cfg, seeds=SEEDS, now=NOW, workers=1)
+        parallel = run(par, build_adapters(client), cfg, seeds=SEEDS, now=NOW, workers=8)
+
+    assert summary(parallel) == summary(sequential)
+    assert [b.board.key() for b in parallel.boards] == [s.key() for s in SEEDS]  # poll order
+    assert uids(parallel.new_jobs) == uids(sequential.new_jobs) == EXPECTED_RELEVANT
+    assert all(b.seconds >= 0 for b in parallel.boards)
+
+
+def test_boards_not_started_before_the_deadline_are_deferred(boards, client, store, cfg, tmp_path):
+    report = run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW, deadline=0.0)
+
+    assert report.boards == [] and report.new_jobs == []
+    assert [b.key() for b in report.deferred] == [s.key() for s in SEEDS]
+    assert not [c for c in boards.calls]  # nothing fetched
+    assert db_rows(tmp_path / "jobs.db", "SELECT uid FROM jobs") == []
+
+
+def test_deferred_board_keeps_its_place_at_the_front(boards, client, store, cfg, tmp_path):
+    discovered = BoardRef("ashby", "newco")
+    store.upsert_board(discovered, now=NOW - timedelta(days=3))
+    run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW, deadline=0.0)
+
+    # Not stamped as checked, so it's still the least recently checked board.
+    last_checked = dict(
+        db_rows(tmp_path / "jobs.db", "SELECT board_key, last_checked FROM companies")
+    )
+    assert last_checked["ashby:newco"] == (NOW - timedelta(days=3)).isoformat()
+    assert store.boards_to_poll()[0] == discovered
+
+
+def test_seeds_are_not_restamped_as_checked_on_every_run(boards, client, store, cfg, tmp_path):
+    run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW)
+    later = NOW + timedelta(days=1)
+    run(store, build_adapters(client), cfg, seeds=SEEDS, now=later, deadline=0.0)
+
+    rows = db_rows(tmp_path / "jobs.db", "SELECT last_checked FROM companies")
+    assert {checked for (checked,) in rows} == {NOW.isoformat()}
+
+
 def test_relevant_hits_recorded_only_for_boards_with_matches(boards, client, store, cfg, tmp_path):
     run(store, build_adapters(client), cfg, seeds=SEEDS, now=NOW)
 

@@ -32,6 +32,7 @@ class DigestStats:
     score_failures: int = 0
     boards_failed: int = 0
     detail_failures: int = 0  # boards whose job descriptions couldn't be fetched
+    boards_deferred: int = 0  # boards not polled before the time budget ran out
     discovery: str | None = None  # one line from the caller, e.g. "Discovery: 20 queries, ..."
 
 
@@ -108,6 +109,10 @@ def _footer_lines(stats: DigestStats) -> list[str]:
         lines.append(stats.discovery)
     if stats.boards_failed:
         lines.append(f"⚠ {stats.boards_failed} board(s) failed to load")
+    if stats.boards_deferred:
+        lines.append(
+            f"⚠ {stats.boards_deferred} board(s) not polled in time; first in line tomorrow"
+        )
     if stats.detail_failures:
         lines.append(
             f"⚠ {stats.detail_failures} board(s) couldn't load job details (will retry next run)"

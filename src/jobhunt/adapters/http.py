@@ -7,6 +7,7 @@ retries with exponential backoff on 429, 5xx and transient network failures.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from email.utils import parsedate_to_datetime
@@ -29,6 +30,8 @@ class PoliteClient:
     """A small synchronous wrapper around ``httpx.Client``.
 
     - Waits at least ``min_interval`` seconds between requests to the same host.
+    - Safe to share between threads: a lock per host means one request at a time per
+      host (retries included), while different hosts proceed in parallel.
     - Retries 429/5xx up to ``max_retries`` times, sleeping ``backoff * 2**attempt``
       seconds, or the server's ``Retry-After`` when it sends one.
     - Retries transient transport failures (``httpx.TimeoutException``,
@@ -56,6 +59,8 @@ class PoliteClient:
         self.backoff = backoff
         self._sleep = sleep
         self._last_request: dict[str, float] = {}
+        self._host_locks: dict[str, threading.Lock] = {}
+        self._host_locks_guard = threading.Lock()
         self._client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=httpx.Timeout(30.0),
@@ -80,6 +85,14 @@ class PoliteClient:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         host = httpx.URL(url).host
+        with self._host_lock(host):
+            return self._request_locked(host, method, url, **kwargs)
+
+    def _host_lock(self, host: str) -> threading.Lock:
+        with self._host_locks_guard:
+            return self._host_locks.setdefault(host, threading.Lock())
+
+    def _request_locked(self, host: str, method: str, url: str, **kwargs: Any) -> httpx.Response:
         attempt = 0
         while True:
             self._wait_for_host(host)

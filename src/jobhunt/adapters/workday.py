@@ -28,6 +28,8 @@ Quirks this adapter handles:
   ``BoardNotFound``.
 - ``locationsText`` is either a single location or a count like ``"6 Locations"``.
   The full list is only available from the detail endpoint.
+- Some tenants (seen on Proofpoint and Salesforce) list placeholder entries holding only
+  ``bulletFields`` (a requisition ID) and no ``externalPath``. They are skipped.
 """
 
 from __future__ import annotations
@@ -108,13 +110,17 @@ class WorkdayAdapter:
             if total is None:
                 total = int(data.get("total") or 0)
 
-            new = [p for p in page if p.get("externalPath") not in seen]
-            seen.update(p.get("externalPath") for p in new)
+            # Some tenants mix in placeholder entries with no externalPath (just an ID in
+            # bulletFields). They have no page to link to, so they're skipped, and they
+            # mustn't count as repeats below.
+            pathful = [p for p in page if p.get("externalPath")]
+            new = [p for p in pathful if p["externalPath"] not in seen]
+            seen.update(p["externalPath"] for p in new)
             postings.extend(new)
             offset += len(page)
 
             # A repeated posting means we paged past the end and Workday wrapped around.
-            if not page or len(new) < len(page):
+            if not page or len(new) < len(pathful):
                 break
             if len(page) < self._page_size or offset >= total:
                 break

@@ -261,6 +261,20 @@ def test_discovery_status_is_in_the_footer(boards, tmp_path, seeds, monkeypatch)
     assert "⚠ Discovery failed: HTTPStatusError: 401 Unauthorized" in digest_text(FakeSMTP.sent[-1])
 
 
+def test_out_of_time_still_sends_the_digest(boards, tmp_path, seeds, capsys):
+    assert daily(tmp_path, seeds, "--time-budget", "0") == 0
+
+    (msg,) = FakeSMTP.sent
+    assert "no new jobs" in msg["Subject"]
+    assert "2 board(s) not polled in time; first in line tomorrow" in digest_text(msg)
+    assert "Out of time: 2 board(s) left for next run" in capsys.readouterr().err
+    assert FakeAnthropic.calls == []
+
+    # Next run, with time: both boards are polled and their jobs go out.
+    assert daily(tmp_path, seeds) == 0
+    assert f"{RELEVANT} new" in FakeSMTP.sent[1]["Subject"]
+
+
 def test_partial_scoring_failure_is_reported_in_the_footer(boards, tmp_path, seeds):
     FakeAnthropic.responses = [scored_message(), api_error(500), scored_message()]
 

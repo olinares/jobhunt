@@ -186,3 +186,12 @@ def test_send_email_missing_env_names_variable(smtp_env, monkeypatch, missing):
     with pytest.raises(DigestConfigError, match=missing):
         send_email("s", "t", "h", smtp_factory=FakeSMTP)
     assert FakeSMTP.instances == []
+
+
+def test_footer_shows_deferred_boards_only_when_present():
+    _, healthy, _ = render_digest(fixture(), day=DAY, stats=STATS)
+    assert "not polled in time" not in healthy
+    stats = DigestStats(boards_polled=100, boards_deferred=12)
+    _, text, html = render_digest(fixture(), day=DAY, stats=stats)
+    assert "⚠ 12 board(s) not polled in time; first in line tomorrow" in text
+    assert "not polled in time" in html

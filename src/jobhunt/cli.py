@@ -10,6 +10,7 @@ import argparse
 import os
 import smtplib
 import sys
+import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import TextIO
@@ -24,12 +25,16 @@ from jobhunt.digest import DigestConfigError, DigestStats, render_digest, send_e
 from jobhunt.discovery.search import SearchClient, SearchConfigError, SerperClient
 from jobhunt.formatting import format_locations, format_pay
 from jobhunt.models import BoardRef, Job
-from jobhunt.pipeline import RunReport, load_seeds, run
+from jobhunt.pipeline import DEFAULT_WORKERS, RunReport, load_seeds, run
 from jobhunt.scoring import ResumeNotFound, Resumes, load_resumes, score_many
 from jobhunt.store import Store, open_store
 
 DEFAULT_REGION_TERMS = ["San Francisco", "Remote"]
 DEFAULT_MAX_SCORE = 100
+# Polling stops starting new boards after this many minutes, so scoring and the email always
+# fit in the workflow's 45-minute limit. Boards left over go first on the next run.
+DEFAULT_DAILY_TIME_BUDGET = 30.0
+SLOWEST_BOARDS_SHOWN = 5
 DEFAULT_DB = "jobhunt.db"
 # The digest is dated in Oz's time zone, not the runner's (UTC).
 DIGEST_TZ = ZoneInfo("America/Los_Angeles")
@@ -45,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     run_cmd = commands.add_parser("run", help="discover boards, poll them, and print relevant jobs")
-    _add_pipeline_args(run_cmd)
+    _add_pipeline_args(run_cmd, time_budget=None)
     run_cmd.add_argument(
         "--all", action="store_true", help="print every relevant job, not just new ones"
     )
@@ -53,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     daily = commands.add_parser(
         "daily", help="run the pipeline, score new jobs, and email the numbered digest"
     )
-    _add_pipeline_args(daily)
+    _add_pipeline_args(daily, time_budget=DEFAULT_DAILY_TIME_BUDGET)
     daily.add_argument(
         "--max-score",
         type=int,
@@ -68,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_pipeline_args(cmd: argparse.ArgumentParser) -> None:
+def _add_pipeline_args(cmd: argparse.ArgumentParser, *, time_budget: float | None) -> None:
     cmd.add_argument("--config", default="config/roles.yaml", help="roles config (titles, regions)")
     cmd.add_argument("--seeds", default="config/seeds.yaml", help="boards polled on every run")
     cmd.add_argument(
@@ -92,6 +97,21 @@ def _add_pipeline_args(cmd: argparse.ArgumentParser) -> None:
         "--prune-weeks",
         type=int,
         help="delete boards with no relevant job in this many weeks (off by default)",
+    )
+    cmd.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help=f"boards fetched at once, never two on one host (default {DEFAULT_WORKERS})",
+    )
+    default = "no limit" if time_budget is None else f"{time_budget:g}"
+    cmd.add_argument(
+        "--time-budget",
+        type=float,
+        default=time_budget,
+        metavar="MINUTES",
+        help=f"stop starting new boards after this long; the rest go first next run "
+        f"(default {default})",
     )
 
 
@@ -131,6 +151,8 @@ def _run_pipeline(
     *,
     err: TextIO,
 ) -> RunReport:
+    # The budget clock starts before discovery, which counts against it too.
+    deadline = None if args.time_budget is None else time.monotonic() + args.time_budget * 60
     search = None if args.no_discover else _search_client(err)
     with PoliteClient() as client:
         try:
@@ -143,6 +165,8 @@ def _run_pipeline(
                 region_terms=args.region_terms or DEFAULT_REGION_TERMS,
                 max_queries=args.max_queries,
                 prune_weeks=args.prune_weeks,
+                workers=args.workers,
+                deadline=deadline,
             )
         finally:
             if search is not None:
@@ -245,6 +269,7 @@ def _digest_stats(
         score_failures=score_failures,
         boards_failed=len(report.failed),
         detail_failures=len(report.detail_failures),
+        boards_deferred=len(report.deferred),
         discovery=_discovery_line(report, no_discover=no_discover),
     )
 
@@ -304,6 +329,12 @@ def format_summary(report: RunReport, *, shown: int, all_jobs: bool) -> str:
         lines.append(f"Pruned {len(report.pruned)} board(s): {', '.join(report.pruned)}")
     for result in report.failed:
         lines.append(f"Failed {result.board.key()}: {result.error}")
+    if report.deferred:
+        keys = ", ".join(board.key() for board in report.deferred)
+        lines.append(f"Out of time: {len(report.deferred)} board(s) left for next run: {keys}")
+    slowest = sorted(report.boards, key=lambda b: b.seconds, reverse=True)[:SLOWEST_BOARDS_SHOWN]
+    if slowest and slowest[0].seconds >= 1:
+        lines.append("Slowest: " + ", ".join(f"{b.board.key()} {b.seconds:.0f}s" for b in slowest))
     for result in report.detail_failures:
         lines.append(
             f"Details failed {result.board.key()} (retried next run): {result.detail_error}"
