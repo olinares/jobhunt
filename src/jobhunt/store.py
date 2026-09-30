@@ -347,6 +347,8 @@ class Store(Protocol):
 
     def set_status(self, uid: str, status: str) -> None: ...
 
+    def set_status_if(self, uid: str, status: str, *, expected: str) -> bool: ...
+
     def record_relevant_hits(
         self, board_key: str, count: int, *, when: datetime | None = None
     ) -> None: ...
@@ -563,6 +565,18 @@ class _SqlStore:
             cur = self._execute("UPDATE jobs SET status = ? WHERE uid = ?", (status, uid))
         if cur.rowcount == 0:
             raise KeyError(uid)
+
+    def set_status_if(self, uid: str, status: str, *, expected: str) -> bool:
+        """Compare-and-set: move `uid` to `status` only if it is currently `expected`, in one
+        atomic statement. Returns whether a row changed (``False`` for an unknown uid too)."""
+        for value in (status, expected):
+            if value not in STATUSES:
+                raise ValueError(f"invalid status {value!r}; must be one of {STATUSES}")
+        with self._transaction():
+            cur = self._execute(
+                "UPDATE jobs SET status = ? WHERE uid = ? AND status = ?", (status, uid, expected)
+            )
+        return cur.rowcount == 1
 
     # -- companies / pruning -------------------------------------------------
 

@@ -52,3 +52,6 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DIGEST_TO: ${{ secrets.DIGEST_TO }}
+          # Approve/Skip links in the email. Both unset (before the deploy) = no links.
+          JOBHUNT_PUBLIC_URL: ${{ vars.JOBHUNT_PUBLIC_URL }}
+          JOBHUNT_LINK_SECRET: ${{ secrets.JOBHUNT_LINK_SECRET }}
