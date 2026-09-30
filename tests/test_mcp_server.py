@@ -14,7 +14,9 @@ from pathlib import Path
 import anyio
 import httpx
 import pytest
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.memory import create_connected_server_and_client_session
+from starlette.testclient import TestClient
 
 from jobhunt import mcp_server
 from jobhunt.discovery.search import SearchConfigError
@@ -481,6 +483,55 @@ def test_prep_application_never_submits(db, root):
     assert "never click submit" in text
     assert 'refs ["3"]' in text
     assert '"applied"' in text
+
+
+# --------------------------------------------------------------------------- Streamable HTTP
+
+REMOTE = "https://jobhunt.example.test"
+
+
+def http_tools_list(server, base_url: str):
+    """POST tools/list to the server's Streamable HTTP app with the given Host."""
+    with TestClient(server.streamable_http_app(), base_url=base_url) as client:
+        return client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "MCP-Protocol-Version": "2025-06-18",
+            },
+        )
+
+
+def test_defaults_keep_the_stdio_settings(db, root):
+    settings = server_for(db, root).settings
+    assert settings.host == "127.0.0.1"
+    assert settings.stateless_http is False
+    assert settings.json_response is False
+    assert settings.auth is None
+
+
+@pytest.mark.parametrize(("base_url", "status"), [(REMOTE, 421), ("http://127.0.0.1:8000", 200)])
+def test_http_allows_only_localhost_by_default(db, root, base_url, status):
+    server = server_for(db, root, stateless_http=True, json_response=True)
+    assert http_tools_list(server, base_url).status_code == status
+
+
+def test_http_accepts_the_host_transport_security_allows(db, root):
+    security = TransportSecuritySettings(
+        allowed_hosts=["jobhunt.example.test"], allowed_origins=[REMOTE]
+    )
+    server = server_for(
+        db,
+        root,
+        transport_security=security,
+        host="0.0.0.0",
+        stateless_http=True,
+        json_response=True,
+    )
+    reply = http_tools_list(server, REMOTE)
+    assert reply.status_code == 200, reply.text
+    assert "search_jobs" in {tool["name"] for tool in reply.json()["result"]["tools"]}
 
 
 # --------------------------------------------------------------------------- main
