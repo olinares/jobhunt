@@ -170,6 +170,15 @@ def test_indented_plain_bullet_is_a_continuation() -> None:
     assert texts(facts) == ["other - shown detail"]
 
 
+def test_box_inside_continuation_is_judged_alone() -> None:
+    facts = parse_facts(
+        "## S\n- [x] ticked\n    [ ] HIDDEN bare box\n  tail · [ ] HIDDEN inline\n"
+        "  [x] shown bare box\n"
+    )
+    assert texts(facts) == ["ticked", "shown bare box"]
+    assert "HIDDEN" not in facts.to_markdown()
+
+
 # --------------------------------------------------------------------------- inline boxes
 
 

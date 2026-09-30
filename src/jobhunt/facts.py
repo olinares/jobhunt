@@ -20,7 +20,8 @@ Parsing rules:
   part is judged alone; the `·` separators are dropped. A `·` with no box after it is plain text.
 - A continuation line (indented, not itself a checkbox) belongs to the item above it and is kept
   or dropped with that item. On a line with several boxes it belongs to the last one. An
-  indented checkbox is its own item. A non-indented line that is not an item ends the item
+  indented checkbox is its own item, and so is a box inside a continuation line, marker or
+  not. A non-indented line that is not an item ends the item
   above, and continuation lines after it are dropped.
 - `###` sub-headings stay inside their `##` section: the sub-heading text becomes a prefix of
   each item under it, `"Languages: Python"`. Deeper sub-headings join with " / ":
@@ -222,8 +223,15 @@ def parse_facts(text: str) -> Facts:
             pending.extend(_boxes(line))
             continue
         if line[0].isspace():
-            if pending:
-                pending[-1].parts.append(line.strip())
+            # A box inside a continuation (`  [ ] more`, `  tail · [ ] JS`) is judged on its own;
+            # only the text before it continues the item above.
+            first_box = _BOX_RE.search(line)
+            head = line[: first_box.start()] if first_box else line
+            head = head.strip().rstrip(_SEPARATOR).strip()
+            if pending and head:
+                pending[-1].parts.append(head)
+            if first_box and pending:
+                pending.extend(_boxes(line))
             continue
         # A non-indented line that is not an item: it ends the item above, and anything
         # indented under it belongs to it, not to that item.
