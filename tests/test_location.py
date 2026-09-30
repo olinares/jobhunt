@@ -191,6 +191,20 @@ def test_job_remote_true_with_no_locations_counts_as_remote_us():
     assert "remote_us" in region_names([], remote=True)
 
 
+@pytest.mark.parametrize(
+    "locations",
+    [["Tokyo"], ["Paris"], ["Dubai"], ["Stockholm", "London"], ["Korea"]],
+)
+def test_job_remote_true_does_not_make_a_named_non_us_city_remote_us(locations):
+    # Seen live on Cohere's Ashby board: remote roles whose only location is a foreign city.
+    assert "remote_us" not in region_names(locations, remote=True)
+
+
+def test_bare_remote_in_korea_does_not_count():
+    # Seen live on NVIDIA's Workday board.
+    assert "remote_us" not in region_names(["Korea, Seoul", "Korea, Remote"])
+
+
 def test_job_remote_none_with_no_locations_does_not_count():
     assert region_names([], remote=None) == ()
 

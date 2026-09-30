@@ -76,6 +76,16 @@ class WorkdayAdapter:
                 self._add_details(base, job)
         return jobs
 
+    def add_details(self, board: BoardRef, jobs: list[Job]) -> None:
+        """Fill descriptions and full locations for `jobs` from `board`, one request each.
+
+        Lets callers fetch details only for the jobs that need them, e.g. listings that
+        say "6 Locations" instead of naming them.
+        """
+        base = f"https://{board.host}/wday/cxs/{board.slug}/{board.site}"
+        for job in jobs:
+            self._add_details(base, job)
+
     def _list_postings(self, base: str) -> list[dict]:
         postings: list[dict] = []
         seen: set[str] = set()

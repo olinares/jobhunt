@@ -69,6 +69,7 @@ NON_US_QUALIFIERS: tuple[str, ...] = (
     "philippines",
     "singapore",
     "japan",
+    "korea",
     "china",
     "africa",
     "nigeria",
@@ -162,7 +163,7 @@ def _region_hit(
             # (Job.remote) can stand in when there's no location text at all.
             if qualifier_present:
                 continue
-            if contains_phrase(tokens, term) or remote is True:
+            if contains_phrase(tokens, term) or (remote is True and not tokens):
                 return True
         elif contains_phrase(tokens, term):
             return True
