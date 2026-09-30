@@ -38,7 +38,7 @@ Design decisions not spelled out in the briefs (flagged in the PRs):
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from json import dumps as _json_dumps
@@ -205,6 +205,10 @@ def _resolve_now(now: datetime | None) -> datetime:
     return now if now is not None else datetime.now(UTC)
 
 
+# How long a job with no description is held back from scoring (see `jobs_to_score`).
+DESCRIPTION_GRACE = timedelta(days=2)
+
+
 def _placeholders(n: int) -> str:
     return ", ".join(["?"] * n)
 
@@ -293,7 +297,15 @@ class Store(Protocol):
 
     def prune_boards(self, weeks: int, *, now: datetime | None = None) -> list[str]: ...
 
-    def jobs_to_score(self, limit: int) -> list[Job]: ...
+    def uids_missing_description(self, uids: Collection[str]) -> set[str]: ...
+
+    def jobs_to_score(
+        self,
+        limit: int,
+        *,
+        now: datetime | None = None,
+        description_grace: timedelta = DESCRIPTION_GRACE,
+    ) -> list[Job]: ...
 
     def save_score(self, uid: str, score: Score, *, now: datetime | None = None) -> None: ...
 
@@ -524,15 +536,43 @@ class _SqlStore:
 
     # -- scoring -------------------------------------------------------------
 
-    def jobs_to_score(self, limit: int) -> list[Job]:
+    def uids_missing_description(self, uids: Collection[str]) -> set[str]:
+        """Which of `uids` are open jobs with no stored description (their details are due)."""
+        uids = list(uids)
+        if not uids:
+            return set()
+        rows = self._fetchall(
+            f"""
+            SELECT uid FROM jobs
+            WHERE uid IN ({_placeholders(len(uids))})
+              AND description_html IS NULL AND closed_at IS NULL
+            """,
+            uids,
+        )
+        return {row["uid"] for row in rows}
+
+    def jobs_to_score(
+        self,
+        limit: int,
+        *,
+        now: datetime | None = None,
+        description_grace: timedelta = DESCRIPTION_GRACE,
+    ) -> list[Job]:
+        """Open, unscored `new` jobs, oldest first.
+
+        A job with no description waits until it is `description_grace` old, so a detail
+        fetch that failed gets a few more runs to succeed before the job is scored blind.
+        """
+        cutoff = _to_utc_iso(_resolve_now(now) - description_grace)
         rows = self._fetchall(
             _JOB_SELECT_SQL
             + """
             WHERE jobs.closed_at IS NULL AND jobs.status = 'new' AND jobs.score IS NULL
+              AND (jobs.description_html IS NOT NULL OR jobs.first_seen <= ?)
             ORDER BY jobs.first_seen, jobs.uid
             LIMIT ?
             """,
-            (limit,),
+            (cutoff, limit),
         )
         return [_row_to_job(row) for row in rows]
 

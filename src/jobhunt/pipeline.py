@@ -2,8 +2,9 @@
 
 Matched jobs are stored with their descriptions, which the scorer needs. Greenhouse, Lever
 and Ashby include them in the listing payload, so they cost nothing extra. Workday and Gem
-need one extra request per posting (Gem: per batch), so those are fetched only for jobs
-that are new and relevant.
+need one extra request per posting (Gem: per batch), so those are fetched only for relevant
+jobs the store holds no description for. A failed detail fetch doesn't fail the board; the
+job stays without a description and is retried on the next run.
 
 Everything with side effects (store, adapters, search client, clock) is passed in, so a
 whole run can be exercised in tests against recorded fixtures.
@@ -40,6 +41,7 @@ class BoardResult:
     new: int = 0
     closed: int = 0
     error: str | None = None
+    detail_error: str | None = None  # descriptions couldn't be fetched; retried next run
 
 
 @dataclass
@@ -59,6 +61,10 @@ class RunReport:
     @property
     def all_failed(self) -> bool:
         return bool(self.boards) and len(self.failed) == len(self.boards)
+
+    @property
+    def detail_failures(self) -> list[BoardResult]:
+        return [b for b in self.boards if b.detail_error]
 
 
 def load_seeds(path: str | Path) -> list[BoardRef]:
@@ -143,14 +149,20 @@ def poll_board(
 
     matched = [job for job in jobs if results[job.uid].matched]
     new_uids = set(store.upsert_jobs(matched, now=now))
+    detail_error = None
     if detailed:
-        # The store has no read-only "is this uid known?" query, so new-ness comes from the
-        # first upsert; the described jobs are then upserted again. Jobs detailed above for
-        # their locations already have a description and cost no second request.
-        missing = [job for job in matched if job.uid in new_uids and not job.description_html]
+        # Ask the store rather than using new_uids, so a job whose details failed on an
+        # earlier run is retried. Jobs detailed above for their locations already have a
+        # description and cost no second request.
+        due = store.uids_missing_description([job.uid for job in matched])
+        missing = [job for job in matched if job.uid in due and not job.description_html]
         if missing:
-            adapter.add_details(board, missing)
-            store.upsert_jobs(missing, now=now)
+            try:
+                adapter.add_details(board, missing)
+            except Exception as exc:  # noqa: BLE001 -- the listing itself succeeded
+                detail_error = f"{type(exc).__name__}: {exc}"
+            # Save whatever did arrive; upsert_jobs keeps NULL for the rest.
+            store.upsert_jobs([job for job in missing if job.description_html], now=now)
     closed = store.mark_closed(board.key(), {job.uid for job in jobs}, now=now)
     store.upsert_board(board, now=now)
     if matched:
@@ -159,7 +171,12 @@ def poll_board(
 
     new_jobs = [job for job in matched if job.uid in new_uids]
     result = BoardResult(
-        board, fetched=len(jobs), matched=len(matched), new=len(new_jobs), closed=len(closed)
+        board,
+        fetched=len(jobs),
+        matched=len(matched),
+        new=len(new_jobs),
+        closed=len(closed),
+        detail_error=detail_error,
     )
     return result, matched, new_jobs
 

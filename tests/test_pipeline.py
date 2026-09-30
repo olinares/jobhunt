@@ -260,6 +260,41 @@ def test_gem_details_fetched_only_for_new_relevant_jobs(client, store, cfg, tmp_
     assert all(html for (html,) in rows)  # re-listing without details keeps them
 
 
+@respx.mock
+def test_failed_gem_details_do_not_fail_the_board_and_are_retried(client, store, cfg, tmp_path):
+    details_down = True
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        ops = json.loads(request.content)
+        if details_down and ops[0]["operationName"] == "ExternalJobPosting":
+            return httpx.Response(503)
+        return gem_handler(request)
+
+    route = respx.post(GEM_URL).mock(side_effect=handler)
+    cfg = replace(cfg, titles=(*cfg.titles, "software engineer"))
+    adapters = build_adapters(client)
+
+    first = run(store, adapters, cfg, seeds=[GEM_SEED], now=NOW)
+    [board] = first.boards
+    assert board.error is None and board.new > 0  # the listing still counts
+    assert "HTTPStatusError" in board.detail_error
+    assert first.detail_failures == [board]
+    assert not first.failed
+    rows = db_rows(tmp_path / "jobs.db", "SELECT description_html FROM jobs")
+    assert rows and all(html is None for (html,) in rows)
+    # Held back from scoring while the description may still arrive.
+    assert store.jobs_to_score(10, now=NOW) == []
+
+    details_down = False
+    seen = route.call_count
+    second = run(store, adapters, cfg, seeds=[GEM_SEED], now=NOW + timedelta(days=1))
+    assert second.new_jobs == []  # not new any more, but still detailed
+    assert detail_ext_ids(route, since=seen) == [[job.external_id for job in first.new_jobs]]
+    assert not second.detail_failures
+    rows = db_rows(tmp_path / "jobs.db", "SELECT description_html FROM jobs")
+    assert all(html for (html,) in rows)
+
+
 # --- discovery --------------------------------------------------------------------------
 
 
