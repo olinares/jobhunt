@@ -23,9 +23,9 @@ jobs:
     # request to a dead or hanging host can take ~2.75 minutes (5 attempts x 30s timeout plus
     # 1+2+4+8s of backoff) before that board is marked failed. Boards on different hosts are
     # polled in parallel (8 at a time), and `jobhunt daily` stops starting new boards after a
-    # 30-minute budget (--time-budget), so scoring and the email always fit in 45 minutes;
-    # boards left over go first the next morning.
-    timeout-minutes: 45
+    # 30-minute budget (--time-budget); boards left over go first the next morning. Scoring
+    # takes ~3s a job, so the 300-job cap needs up to ~15 minutes after polling.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -41,7 +41,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: jobhunt daily
         # Just under the job limit, so a hung run fails on this step with its log intact.
-        timeout-minutes: 40
+        timeout-minutes: 55
         run: jobhunt daily
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

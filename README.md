@@ -35,7 +35,7 @@ which turns the GitHub Actions run red. A partial failure only shows in the dige
 ### Running it on GitHub Actions
 
 `.github/workflows/daily.yml` runs `jobhunt daily` at 13:30 UTC (06:30 PDT / 05:30 PST),
-never two at once, with a 45-minute limit. Set these repository secrets:
+never two at once, with a 60-minute limit. Set these repository secrets:
 
 ```bash
 gh secret set DATABASE_URL          # Postgres URL (e.g. Neon); required
