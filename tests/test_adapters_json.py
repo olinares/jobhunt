@@ -121,6 +121,71 @@ def test_client_gives_up_after_max_retries():
     assert sleeps == [1.0, 2.0]
 
 
+class FlakyTransport:
+    """A MockTransport handler that raises each queued exception, then answers 200."""
+
+    def __init__(self, *errors: Exception) -> None:
+        self.errors = list(errors)
+        self.calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+        return httpx.Response(200, json={"ok": 1})
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ConnectTimeout("connect timed out"),
+        httpx.ReadTimeout("read timed out"),
+        httpx.ConnectError("connection refused"),
+        httpx.ReadError("connection reset"),
+        httpx.RemoteProtocolError("server disconnected"),
+    ],
+    ids=lambda error: type(error).__name__,
+)
+def test_client_retries_transient_transport_errors_with_backoff(error):
+    sleeps: list[float] = []
+    handler = FlakyTransport(error, error)
+    client = fast_client(transport=httpx.MockTransport(handler), backoff=0.5, sleep=sleeps.append)
+    assert client.get_json("https://a.example/x") == {"ok": 1}
+    assert sleeps == [0.5, 1.0]
+    assert handler.calls == 3
+
+
+def test_client_reraises_original_transport_error_after_max_retries():
+    sleeps: list[float] = []
+    errors = [httpx.ReadTimeout(f"timeout {i}") for i in range(3)]
+    handler = FlakyTransport(*errors)
+    client = fast_client(transport=httpx.MockTransport(handler), max_retries=2, sleep=sleeps.append)
+    with pytest.raises(httpx.ReadTimeout) as exc:
+        client.get_json("https://a.example/x")
+    assert exc.value is errors[-1]
+    assert handler.calls == 3  # one try + two retries
+    assert sleeps == [1.0, 2.0]
+
+
+def test_client_does_not_retry_permanent_transport_errors():
+    handler = FlakyTransport(httpx.UnsupportedProtocol("bad scheme"))
+    client = fast_client(transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.UnsupportedProtocol):
+        client.get_json("https://a.example/x")
+    assert handler.calls == 1
+
+
+def test_client_keeps_polite_interval_after_transport_error():
+    sleeps: list[float] = []
+    handler = FlakyTransport(httpx.ConnectError("refused"))
+    client = PoliteClient(
+        transport=httpx.MockTransport(handler), min_interval=1.0, backoff=0.5, sleep=sleeps.append
+    )
+    assert client.get_json("https://a.example/x") == {"ok": 1}
+    # backoff sleep, then the per-host interval wait before the retry
+    assert len(sleeps) == 2 and sleeps[0] == 0.5 and 0.5 < sleeps[1] <= 1.0
+
+
 @pytest.mark.parametrize("status", [400, 403, 404])
 def test_client_raises_immediately_on_other_errors(status):
     handler = Recorder(httpx.Response(status))
