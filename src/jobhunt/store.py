@@ -40,6 +40,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from json import dumps as _json_dumps
 from json import loads as _json_loads
@@ -183,16 +184,26 @@ ON CONFLICT (uid) DO UPDATE SET
 """
 
 # Columns needed to rebuild a full `Job` (plus its score, when present).
-_JOB_SELECT_SQL = """
-SELECT
+_JOB_COLUMNS_SQL = """
     jobs.uid, jobs.board_key, jobs.title, jobs.company, jobs.url, jobs.locations_json,
     jobs.remote, jobs.pay_min, jobs.pay_max, jobs.pay_currency, jobs.pay_period,
     jobs.posted_at, jobs.description_html,
     jobs.score, jobs.score_variant, jobs.score_reason, jobs.pay_suspect,
     companies.ats, companies.slug, companies.host, companies.site, companies.company_name
+"""
+_JOB_FROM_SQL = """
 FROM jobs
 JOIN companies ON companies.board_key = jobs.board_key
 """
+_JOB_SELECT_SQL = "SELECT" + _JOB_COLUMNS_SQL + _JOB_FROM_SQL
+
+# `_JOB_SELECT_SQL` plus the lifecycle columns a `JobRecord` carries.
+_RECORD_SELECT_SQL = (
+    "SELECT"
+    + _JOB_COLUMNS_SQL.rstrip()
+    + ",\n    jobs.status, jobs.first_seen, jobs.closed_at"
+    + _JOB_FROM_SQL
+)
 
 
 def _to_utc_iso(dt: datetime) -> str:
@@ -268,6 +279,51 @@ def _row_to_score(row: Any) -> Score:
     )
 
 
+def _row_to_optional_score(row: Any) -> Score | None:
+    return None if row["score"] is None else _row_to_score(row)
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
+
+
+def _like_pattern(text: str) -> str:
+    """A ``LIKE`` pattern matching `text` literally as a substring (escape char ``!``)."""
+    escaped = text.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    return f"%{escaped}%"
+
+
+@dataclass(frozen=True)
+class JobRecord:
+    """A stored job with its score (``None`` until scored) and lifecycle fields."""
+
+    job: Job
+    score: Score | None
+    status: str
+    first_seen: datetime
+    closed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class BoardRecord:
+    """A registered board with its polling bookkeeping."""
+
+    board: BoardRef
+    first_seen: datetime
+    last_checked: datetime | None
+    last_relevant_hit: datetime | None
+
+
+def _row_to_record(row: Any) -> JobRecord:
+    return JobRecord(
+        job=_row_to_job(row),
+        score=_row_to_optional_score(row),
+        status=row["status"],
+        first_seen=datetime.fromisoformat(row["first_seen"]),
+        closed_at=_parse_ts(row["closed_at"]),
+    )
+
+
 class Store(Protocol):
     """Storage interface implemented by `SqliteStore` and `PostgresStore`."""
 
@@ -316,6 +372,24 @@ class Store(Protocol):
     def digest_uid(self, digest_id: int, n: int) -> str | None: ...
 
     def latest_digest_id(self) -> int | None: ...
+
+    def get_job(self, uid: str) -> JobRecord | None: ...
+
+    def search_jobs(
+        self,
+        *,
+        query: str | None = None,
+        statuses: Collection[str] | None = None,
+        min_score: int | None = None,
+        variant: str | None = None,
+        remote: bool | None = None,
+        include_closed: bool = False,
+        limit: int = 50,
+    ) -> list[JobRecord]: ...
+
+    def list_boards(self) -> list[BoardRecord]: ...
+
+    def digest_items(self, digest_id: int) -> list[tuple[int, str]]: ...
 
 
 class _SqlStore:
@@ -637,6 +711,78 @@ class _SqlStore:
 
     def latest_digest_id(self) -> int | None:
         return self._fetchone("SELECT MAX(id) AS id FROM digests")["id"]
+
+    # -- read queries (MCP server) -----------------------------------------------
+
+    def get_job(self, uid: str) -> JobRecord | None:
+        row = self._fetchone(_RECORD_SELECT_SQL + "WHERE jobs.uid = ?", (uid,))
+        return None if row is None else _row_to_record(row)
+
+    def search_jobs(
+        self,
+        *,
+        query: str | None = None,
+        statuses: Collection[str] | None = None,
+        min_score: int | None = None,
+        variant: str | None = None,
+        remote: bool | None = None,
+        include_closed: bool = False,
+        limit: int = 50,
+    ) -> list[JobRecord]:
+        conditions: list[str] = []
+        params: list[object] = []
+        if statuses is not None:
+            wanted = list(dict.fromkeys(statuses))
+            unknown = [s for s in wanted if s not in STATUSES]
+            if unknown:
+                raise ValueError(f"unknown status: {unknown[0]!r}")
+            if not wanted:
+                return []
+            conditions.append(f"jobs.status IN ({_placeholders(len(wanted))})")
+            params.extend(wanted)
+        if query:
+            pattern = _like_pattern(query.lower())
+            conditions.append(
+                "(LOWER(jobs.title) LIKE ? ESCAPE '!' OR LOWER(jobs.company) LIKE ? ESCAPE '!')"
+            )
+            params.extend([pattern, pattern])
+        if min_score is not None:
+            conditions.append("jobs.score >= ?")
+            params.append(min_score)
+        if variant is not None:
+            conditions.append("jobs.score_variant = ?")
+            params.append(variant)
+        if remote is not None:
+            conditions.append("jobs.remote = ?")
+            params.append(int(remote))
+        if not include_closed:
+            conditions.append("jobs.closed_at IS NULL")
+        where = f"WHERE {' AND '.join(conditions)} " if conditions else ""
+        rows = self._fetchall(
+            _RECORD_SELECT_SQL
+            + where
+            + "ORDER BY jobs.score IS NULL, jobs.score DESC, jobs.first_seen, jobs.uid LIMIT ?",
+            (*params, limit),
+        )
+        return [_row_to_record(row) for row in rows]
+
+    def list_boards(self) -> list[BoardRecord]:
+        rows = self._fetchall("SELECT * FROM companies ORDER BY board_key")
+        return [
+            BoardRecord(
+                board=_row_to_board(row),
+                first_seen=datetime.fromisoformat(row["first_seen"]),
+                last_checked=_parse_ts(row["last_checked"]),
+                last_relevant_hit=_parse_ts(row["last_relevant_hit"]),
+            )
+            for row in rows
+        ]
+
+    def digest_items(self, digest_id: int) -> list[tuple[int, str]]:
+        rows = self._fetchall(
+            "SELECT n, uid FROM digest_items WHERE digest_id = ? ORDER BY n", (digest_id,)
+        )
+        return [(row["n"], row["uid"]) for row in rows]
 
 
 class SqliteStore(_SqlStore):
