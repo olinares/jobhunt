@@ -1,0 +1,56 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC: hand-built in the shape of a Messages API response; no API key was available when this was written. Re-record with tests/fixtures/scoring/record.py.",
+  "case": "poor_fit",
+  "summary": "Title matches, but the job is on-site industrial controls work; poor fit.",
+  "job": {
+    "board": {
+      "ats": "lever",
+      "slug": "brightmill",
+      "company_name": "Brightmill Controls"
+    },
+    "external_id": "5c9d6a2e-0000-4000-8000-000000000003",
+    "title": "Solutions Engineer, Industrial Automation",
+    "company": "Brightmill Controls",
+    "url": "https://jobs.lever.co/brightmill/5c9d6a2e-0000-4000-8000-000000000003",
+    "locations": [
+      "Gary, IN"
+    ],
+    "remote": false,
+    "pay_min": 85000.0,
+    "pay_max": 105000.0,
+    "pay_currency": "USD",
+    "pay_period": "year",
+    "department": null,
+    "description_html": "<p><strong>Solutions Engineer, Industrial Automation</strong></p><p>Design and commission PLC-based control systems at customer plants.</p><ul><li>Program Rockwell and Siemens PLCs; build HMI screens</li><li>Travel up to 70% for on-site commissioning</li><li>PE license or electrical engineering degree required</li></ul>"
+  },
+  "expected": {
+    "pay_suspect": false
+  },
+  "response": {
+    "id": "msg_synthetic_poor_fit",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"value\": 22, \"variant\": \"se\", \"reason\": \"Despite the title, this is on-site PLC and control-systems engineering, which neither resume covers. It also requires an electrical engineering credential the resumes do not list.\"}"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1611,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 64,
+      "service_tier": "standard"
+    }
+  }
+}

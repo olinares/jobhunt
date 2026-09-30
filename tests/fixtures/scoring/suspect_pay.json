@@ -1,0 +1,56 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC: hand-built in the shape of a Messages API response; no API key was available when this was written. Re-record with tests/fixtures/scoring/record.py.",
+  "case": "suspect_pay",
+  "summary": "Reasonable FDE fit with placeholder pay ($1-$2), so pay_suspect is set in code.",
+  "job": {
+    "board": {
+      "ats": "ashby",
+      "slug": "quarrylabs",
+      "company_name": "Quarry Labs"
+    },
+    "external_id": "e1a4f3b9-0000-4000-8000-000000000004",
+    "title": "Forward Deployed Engineer",
+    "company": "Quarry Labs",
+    "url": "https://jobs.ashbyhq.com/quarrylabs/e1a4f3b9-0000-4000-8000-000000000004",
+    "locations": [
+      "San Francisco, CA"
+    ],
+    "remote": null,
+    "pay_min": 1.0,
+    "pay_max": 2.0,
+    "pay_currency": "USD",
+    "pay_period": "year",
+    "department": "Engineering",
+    "description_html": "<div><p>Quarry Labs helps logistics companies automate back-office work.</p><p>As a Forward Deployed Engineer you will:</p><ul><li>Scope customer workflows and build automations on our platform</li><li>Own onboarding for two or three enterprise accounts</li><li>Prototype quickly in Python</li></ul></div>"
+  },
+  "expected": {
+    "pay_suspect": true
+  },
+  "response": {
+    "id": "msg_synthetic_suspect_pay",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"value\": 72, \"variant\": \"fde\", \"reason\": \"Your FDE resume's customer onboarding and Python automation work fits this role well. The posting is light on detail about seniority, so the level match is uncertain.\"}"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1583,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 62,
+      "service_tier": "standard"
+    }
+  }
+}

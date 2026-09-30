@@ -1,0 +1,59 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC: hand-built in the shape of a Messages API response; no API key was available when this was written. Re-record with tests/fixtures/scoring/record.py.",
+  "case": "truncated",
+  "summary": "Response cut off at max_tokens; must be treated as a failed score.",
+  "record_overrides": {
+    "max_tokens": 16
+  },
+  "job": {
+    "board": {
+      "ats": "greenhouse",
+      "slug": "lumenfield",
+      "company_name": "Lumenfield"
+    },
+    "external_id": "4410005",
+    "title": "Solutions Architect",
+    "company": "Lumenfield",
+    "url": "https://job-boards.greenhouse.io/lumenfield/jobs/4410005",
+    "locations": [
+      "Chicago, IL"
+    ],
+    "remote": false,
+    "pay_min": null,
+    "pay_max": null,
+    "pay_currency": null,
+    "pay_period": null,
+    "department": null,
+    "description_html": "<p>Design reference architectures for enterprise customers.</p>"
+  },
+  "expected": {
+    "error": "stop_reason=max_tokens"
+  },
+  "response": {
+    "id": "msg_synthetic_truncated",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"value\": 64, \"variant\": \"se\", \"reason\": \"Your"
+      }
+    ],
+    "stop_reason": "max_tokens",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1532,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 16,
+      "service_tier": "standard"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC: hand-built in the shape of a Messages API response; no API key was available when this was written. Re-record with tests/fixtures/scoring/record.py.",
+  "case": "strong_se",
+  "summary": "Pre-sales Solutions Engineer role; strong SE fit.",
+  "job": {
+    "board": {
+      "ats": "greenhouse",
+      "slug": "lumenfield",
+      "company_name": "Lumenfield"
+    },
+    "external_id": "4410001",
+    "title": "Senior Solutions Engineer",
+    "company": "Lumenfield",
+    "url": "https://job-boards.greenhouse.io/lumenfield/jobs/4410001",
+    "locations": [
+      "Remote - US"
+    ],
+    "remote": true,
+    "pay_min": 150000.0,
+    "pay_max": 190000.0,
+    "pay_currency": "USD",
+    "pay_period": "year",
+    "department": "Sales Engineering",
+    "description_html": "<h2>About the role</h2><p>Lumenfield builds an API platform for event data. As a Senior Solutions Engineer you partner with account executives through the whole pre-sales cycle.</p><h3>What you&#39;ll do</h3><ul><li>Run technical discovery and tailor live demos to each prospect</li><li>Scope and lead proofs of concept, writing Python and SQL where needed</li><li>Answer security &amp; architecture questionnaires</li></ul><h3>What we look for</h3><ul><li>5+ years in solutions engineering or a customer-facing technical role</li><li>Comfort with REST APIs and cloud data tooling</li></ul>"
+  },
+  "expected": {
+    "pay_suspect": false
+  },
+  "response": {
+    "id": "msg_synthetic_strong_se",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"value\": 88, \"variant\": \"se\", \"reason\": \"Your SE resume's discovery, demo and proof-of-concept work matches this pre-sales role closely. The main gap is that the posting leans on event-data tooling the resume does not mention.\"}"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1742,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 71,
+      "service_tier": "standard"
+    }
+  }
+}
