@@ -3,13 +3,109 @@
 A job-discovery pipeline for Solutions Engineer and Forward Deployed Engineer roles. It finds
 company job boards on Greenhouse, Lever, Ashby, Workday and Gem, pulls every posting, keeps
 the ones whose title and location fit (`config/roles.yaml`), scores each new one against two
-resume versions with Claude Haiku, and emails a numbered digest every morning.
+resume versions with Claude Haiku, and emails a numbered digest every morning. Each entry has
+one-tap Approve and Skip links, and an [MCP](https://modelcontextprotocol.io) server lets Claude
+turn an approved job into a filled-in application form that a human reviews and submits.
+
+Python 3.12, httpx, Postgres (SQLite locally), FastMCP from the official MCP SDK, GitHub Actions
+for the daily run, Cloud Run for the remote server.
+
+```mermaid
+flowchart LR
+    ATS["ATS boards<br/>Greenhouse, Lever, Ashby,<br/>Workday, Gem"] --> POLL["Poll and filter<br/>title + region"]
+    SERP["Discovery<br/>Serper search"] -->|"new boards"| POLL
+    POLL --> DB[("Neon Postgres")]
+    DB --> SCORE["Haiku scoring<br/>0-100 fit + SE or FDE"]
+    SCORE --> DB
+    DB --> MAIL["Gmail digest<br/>numbered, signed links"]
+    MAIL -->|"tap Approve / Skip"| WEB["Cloud Run<br/>/a/token"]
+    WEB --> DB
+    DB <--> MCP["Remote MCP server<br/>Cloud Run, GitHub OAuth"]
+    MCP <--> CLAUDE["Claude (claude.ai or Claude Code)"]
+    CLAUDE -->|"drives the browser"| FORM["Claude in Chrome<br/>fills the form"]
+    FORM --> ME["You review<br/>and submit"]
+```
+
+The polling, scoring and email run as one `jobhunt daily` job on GitHub Actions. The remote
+server is a separate deployment that shares the same database.
 
 ```bash
 pip install -e ".[dev]"
 jobhunt run --no-discover      # poll the seed boards and print new relevant jobs
 pytest -q
 ```
+
+## How a job flows
+
+1. **`new`**: the morning run finds a relevant posting, scores it and puts it in the digest as
+   item 3, say. A posting that disappears from its board while still `new` becomes `closed`.
+2. **`approved` or `skipped`**: tap Approve or Skip in the email, or tell Claude "approve 3
+   and 7". The email link opens a confirmation page and only its button changes the status,
+   and only from `new`; a status you set another way is never overwritten.
+3. **Prep**: "prep 3" builds the application packet (job, description, the resume variant the
+   scorer picked, ticked verified facts, rules). Claude drafts answers from it and fills in
+   the form with Claude in Chrome. It never clicks submit.
+4. **`applied`**: you review and submit the form, then Claude marks the job `applied`.
+5. **`interviewing`, `offer`, `rejected`**: set from chat as things happen. `list_pipeline`
+   shows everything approved or later, including jobs that have closed on the board.
+
+## Scorer evaluation
+
+The scorer is checked against a human reading of the same postings: 50 jobs sampled from real
+scored ones with a fixed seed (about a third each from scores >= 70, 45-69 and < 45, mixing SE
+and FDE), labeled by hand as `strong`, `maybe` or `no` with the resume variant I would send.
+The labels are public and never include the model's score or reasons, so they aren't anchored
+to it. Scores map to verdicts with fixed buckets (strong >= 70, maybe 45-69, no < 45), and each
+model is scored on:
+
+- **Verdict agreement** between the bucketed score and the label, with a confusion matrix.
+- **Spearman rho** between the raw score and the label order, which ignores where the bucket
+  edges fall.
+- **Variant accuracy**: how often the model picks the same resume variant.
+- **Cost per job** (from list prices, dated in `src/jobhunt/evals.py`) and p50/p95 latency.
+
+Claude Haiku 4.5 is compared with Claude Sonnet 5.5, both with thinking off so the comparison
+is like for like. The tooling and how to reproduce it are in [evals/README.md](evals/README.md);
+it needs the private resumes and an API key, so it runs locally and never in CI.
+
+<!-- EVAL RESULTS: filled in after evals/results/*.md are committed -->
+
+The daily run uses `claude-haiku-4-5` (the default in `src/jobhunt/scoring.py`; set
+`JOBHUNT_SCORER_MODEL` to change it). It scores up to 300 jobs a run, one at a time, so cost
+and latency matter, and the table above is what shows whether a larger model earns its price.
+
+## Engineering choices
+
+- **Polite HTTP.** Every ATS request goes through one client: a descriptive User-Agent, one
+  request at a time per host with about a second between requests, and retries with backoff
+  on 429, 5xx and transient network errors. Different hosts are polled in parallel.
+- **Idempotent digests.** Jobs are numbered and recorded only after the email is sent, so a
+  failed send leaves them for the next digest, a job is never emailed twice, and a quiet day
+  still sends a short email so silence means something broke.
+- **A deterministic packet with ticked facts only.** `build_packet` makes no LLM call. It
+  loads only `[x]` items from a gitignored facts file, and its rules tell the model to answer
+  "not in verified facts" rather than invent a number, employer or claim.
+- **Scanner-safe signed links.** Approve and Skip links are HMAC-SHA256 tokens that expire
+  (14 days by default). GET only shows a confirmation page, so a mail scanner or link
+  previewer that fetches the URL can't approve anything; the POST does.
+- **OAuth allowlisted to one GitHub id.** The remote server is its own MCP authorization
+  server and uses GitHub only to log in. It admits one numeric GitHub id, not a login, since
+  logins can be renamed and re-registered. Codes and tokens are stored as hashes.
+- **Tests never hit the network.** Adapters are tested against recorded fixtures, the API and
+  SMTP clients are swapped for fakes, and CI runs the store tests against a real Postgres.
+- **Private text stays private.** Resumes and verified facts come from gitignored files or
+  secrets, are never logged, and never appear in eval output.
+
+## Setup
+
+- **Local (SQLite):** `pip install -e ".[dev]"`, then `jobhunt run --no-discover`. The database
+  is `$DATABASE_URL` if set, else `jobhunt.db`.
+- **Cloud digest:** the next section. GitHub Actions, Neon Postgres and Gmail SMTP.
+- **Remote MCP server:** built for Cloud Run behind GitHub OAuth, so it can be added to
+  claude.ai as a custom connector. The one-time setup is in [docs/deploy.md](docs/deploy.md).
+  The server needs the same `DATABASE_URL`, the resumes, the facts and the shared link secret;
+  `.env.example` lists the variables.
+- **Claude Code (stdio):** the [MCP server section](#claude-code-mcp-server) below.
 
 ## Daily digest
 
@@ -48,6 +144,10 @@ gh secret set SEARCH_API_KEY        # optional: Serper key for discovery
 gh secret set DIGEST_TO             # optional: recipient, defaults to GMAIL_ADDRESS
 ```
 
+For the Approve/Skip links, also set the secret `JOBHUNT_LINK_SECRET` and the repository
+variable `JOBHUNT_PUBLIC_URL` (the remote server's address). With either unset the digest goes
+out without links. [docs/deploy.md](docs/deploy.md) covers both.
+
 Then run it once by hand and check the email arrives before relying on the schedule:
 
 ```bash
@@ -73,7 +173,7 @@ not paid for twice. The database is `$DATABASE_URL` if set, else `jobhunt.db`; p
 `--db other.db` to keep a dry run away from your real data. Resumes come from `RESUME_SE` /
 `RESUME_FDE`, else `private/resumes/se.md` and `fde.md` (gitignored).
 
-## Phase 4: Claude Code MCP server
+## Claude Code MCP server
 
 `jobhunt-mcp` is a local [MCP](https://modelcontextprotocol.io) server (stdio) that puts the
 job store, the pipeline and the application packet in front of Claude Code, so the morning
