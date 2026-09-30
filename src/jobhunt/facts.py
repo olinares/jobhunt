@@ -40,7 +40,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FACTS_ENV = "JOBHUNT_FACTS"
+FACTS_ENV = "JOBHUNT_FACTS"  # path to a facts file
+FACTS_TEXT_ENV = "VERIFIED_FACTS"  # the facts file's text itself, e.g. a secret on a remote host
 DEFAULT_FACTS_PATH = Path("private/verified.md")
 EXAMPLE_PATH = Path("facts/verified.example.md")
 # Oz's unconfirmed working copy. It must never be loaded, even by explicit path.
@@ -115,7 +116,15 @@ def facts_path(path: str | Path | None = None, *, root: str | Path = ".") -> Pat
 
 
 def load_facts(path: str | Path | None = None, *, root: str | Path = ".") -> Facts:
-    """Read and parse the verified facts file. Raises FactsNotFound; never tries another file."""
+    """Read and parse the verified facts.
+
+    Precedence: explicit `path`, then `$VERIFIED_FACTS` (the file's text), then `$JOBHUNT_FACTS`
+    (a path), then `<root>/private/verified.md`. Raises FactsNotFound; never tries another source.
+    """
+    if path is None:
+        text = os.environ.get(FACTS_TEXT_ENV, "")
+        if text.strip():
+            return parse_facts(text)
     target = facts_path(path, root=root)
     if target.name == DRAFT_NAME:
         raise FactsNotFound(
@@ -131,7 +140,8 @@ def load_facts(path: str | Path | None = None, *, root: str | Path = ".") -> Fac
             source = "the default location"
         raise FactsNotFound(
             f"No verified facts file at {target} ({source}). Looked for: an explicit path, "
-            f"then ${FACTS_ENV}, then <root>/{DEFAULT_FACTS_PATH}. Copy the format from "
+            f"then ${FACTS_TEXT_ENV} (text), then ${FACTS_ENV} (path), then "
+            f"<root>/{DEFAULT_FACTS_PATH}. Copy the format from "
             f"{EXAMPLE_PATH} into {DEFAULT_FACTS_PATH} and tick the facts you would defend."
         )
     return parse_facts(target.read_text(encoding="utf-8"))
