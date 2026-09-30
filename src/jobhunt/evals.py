@@ -61,13 +61,22 @@ LABELS_HEADER = (
     "keep notes short and non-personal.\n"
 )
 
-# Approximate USD per million tokens (input, output), as listed on 2026-09-30. Cache
-# discounts and premiums are ignored, so cost is a rough estimate. Unknown models get no cost.
-PRICES_AS_OF = "2026-09-30"
+# Approximate USD per million tokens (input, output), first-party API list prices as of
+# 2026-09-25. Cache discounts and premiums are ignored, so cost is a rough estimate. Unknown
+# models get no cost.
+PRICES_AS_OF = "2026-09-25"
 PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.0, 5.0),
-    "claude-sonnet-4-5": (3.0, 15.0),
-    "claude-opus-4-5": (5.0, 25.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-opus-5-5": (4.0, 20.0),
+}
+
+# Extra request fields per model, so every model scores the way Haiku does: without thinking.
+# Claude Sonnet 5.5 thinks by default, and thinking tokens count against the scorer's small
+# max_tokens; `between_tools` turns it off (`disabled` is a 400 on that model). Claude Opus 5.5
+# can't turn thinking off at all, so it is not a like-for-like comparison and has no entry.
+REQUEST_EXTRAS: dict[str, dict[str, Any]] = {
+    "claude-sonnet-5-5": {"thinking": {"type": "between_tools"}},
 }
 
 
@@ -123,11 +132,20 @@ def percentile(values: Sequence[float], p: float) -> float | None:
     return ordered[rank - 1]
 
 
-def price_for(model: str) -> tuple[float, float] | None:
-    for name, price in PRICES_PER_MTOK.items():
+def _for_model(table: Mapping[str, Any], model: str) -> Any:
+    for name, value in table.items():
         if model == name or model.startswith(name + "-"):
-            return price
+            return value
     return None
+
+
+def price_for(model: str) -> tuple[float, float] | None:
+    return _for_model(PRICES_PER_MTOK, model)
+
+
+def eval_request(job: Job, resumes: Resumes, model: str) -> dict[str, Any]:
+    """The daily scorer's request for `model`, plus any per-model extras (REQUEST_EXTRAS)."""
+    return {**build_request(job, resumes, model=model), **(_for_model(REQUEST_EXTRAS, model) or {})}
 
 
 # --------------------------------------------------------------------------- export
@@ -323,7 +341,7 @@ def run_eval(
             continue
         start = clock()
         try:
-            message = client.messages.create(**build_request(job, resumes, model=model))
+            message = client.messages.create(**eval_request(job, resumes, model))
             latency = clock() - start
             score = parse_score(message, job)
         except _FATAL:
