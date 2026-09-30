@@ -10,11 +10,12 @@ from datetime import date
 from email.message import EmailMessage
 from html import escape
 
-from jobhunt.models import Job, ScoredJob
+from jobhunt.formatting import format_locations as _format_locations
+from jobhunt.formatting import format_pay as _format_pay
+from jobhunt.models import ScoredJob
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
-MAX_LOCATIONS_SHOWN = 3
 VARIANT_LABEL = {"se": "SE", "fde": "FDE"}
 
 
@@ -81,28 +82,6 @@ def _subject(items: list[ScoredJob], day: date) -> str:
         return f"jobhunt · {_when(day)} · no new jobs"
     top = max(i.score.value for i in items)
     return f"jobhunt · {_when(day)} · {len(items)} new (top {top})"
-
-
-def _format_locations(job: Job) -> str | None:
-    if job.locations:
-        shown = job.locations[:MAX_LOCATIONS_SHOWN]
-        extra = len(job.locations) - len(shown)
-        return "; ".join(shown) + (f" (+{extra} more)" if extra else "")
-    if job.remote:
-        return "Remote"
-    return None
-
-
-def _format_pay(job: Job) -> str | None:
-    if job.pay_min is None and job.pay_max is None:
-        return None
-    amounts = [f"{v:,.0f}" for v in (job.pay_min, job.pay_max) if v is not None]
-    text = "–".join(dict.fromkeys(amounts))
-    if job.pay_currency:
-        text = f"{job.pay_currency} {text}"
-    if job.pay_period:
-        text += f"/{job.pay_period}"
-    return text
 
 
 def _pay_line(item: ScoredJob) -> str | None:
