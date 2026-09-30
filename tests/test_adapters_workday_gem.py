@@ -85,6 +85,28 @@ def test_workday_stops_when_offset_wraps_to_first_page(client):
 
 
 @respx.mock
+def test_workday_skips_placeholder_postings_without_ending_paging(client):
+    """Some tenants list entries with only bulletFields (seen live on Proofpoint)."""
+    second = load("workday_nvidia_page2.json")
+    second["jobPostings"][3] = {"bulletFields": ["R14546"]}
+    second["jobPostings"][7] = {"bulletFields": ["R14547"]}
+
+    def handler(request):
+        offset = json.loads(request.content)["offset"]
+        if offset == 10:
+            return httpx.Response(200, json=second)
+        return workday_pages_by_offset(request)
+
+    route = respx.post(f"{WD_BASE}/jobs").mock(side_effect=handler)
+    jobs = WorkdayAdapter(client, page_size=10, clock=lambda: RECORDED_ON).fetch(WD_BOARD)
+
+    # Two placeholders dropped; the third page is still fetched.
+    assert len(jobs) == 21
+    assert [json.loads(c.request.content)["offset"] for c in route.calls] == [0, 10, 20]
+    assert all(job.raw.get("externalPath") for job in jobs)
+
+
+@respx.mock
 def test_workday_maps_listing_fields(client):
     respx.post(f"{WD_BASE}/jobs").mock(side_effect=workday_pages_by_offset)
     jobs = WorkdayAdapter(client, page_size=10, clock=lambda: RECORDED_ON).fetch(WD_BOARD)
