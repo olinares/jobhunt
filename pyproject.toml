@@ -16,6 +16,7 @@ dev = ["pytest>=8", "ruff>=0.6", "respx>=0.21"]
 [project.scripts]
 jobhunt = "jobhunt.cli:main"
 jobhunt-mcp = "jobhunt.mcp_server:main"
+jobhunt-remote = "jobhunt.remote:main"
 
 [tool.ruff]
 line-length = 100

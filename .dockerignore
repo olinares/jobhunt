@@ -1,0 +1,9 @@
+# Allowlist: the image gets pyproject.toml, src/ and config/, nothing else. private/, .env,
+# tests/, evals/, local databases and the repo's history can't end up in it.
+*
+!pyproject.toml
+!src/
+!config/
+**/__pycache__
+**/*.pyc
+**/*.egg-info

@@ -1,0 +1,94 @@
+name: Deploy
+
+# Builds the image and deploys jobhunt-remote to Cloud Run. Off until Oz has done the one-time
+# setup in docs/deploy.md and set the repo variable DEPLOY_ENABLED=true: before that, every
+# run (push or manual) skips the job.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; a newer push waits rather than racing the one in flight.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token Workload Identity Federation swaps for GCP credentials
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: jobhunt
+      REPOSITORY: jobhunt
+      RUNTIME_SA: jobhunt-run@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+      PUBLIC_URL: ${{ vars.JOBHUNT_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the repo variables are set
+        run: |
+          for name in GCP_PROJECT_ID GCP_REGION GCP_WIF_PROVIDER GCP_DEPLOY_SA JOBHUNT_PUBLIC_URL; do
+            test -n "${!name}" || { echo "::error::repo variable $name is not set"; exit 1; }
+          done
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          GCP_DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+          JOBHUNT_PUBLIC_URL: ${{ vars.JOBHUNT_PUBLIC_URL }}
+
+      # Keyless: GitHub's OIDC token is exchanged for a short-lived token of the deploy
+      # service account. No JSON key exists anywhere.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push the image
+        run: |
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE:$GITHUB_SHA"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+      # --allow-unauthenticated: Cloud Run lets requests through and the app does its own
+      # OAuth. --timeout 900: refresh_boards and discover_companies can be slow. --cpu-boost:
+      # claude.ai gives the OAuth endpoints 10s, and a cold start has to fit inside that.
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --service-account "$RUNTIME_SA" \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 900 \
+            --cpu-boost \
+            --set-env-vars "JOBHUNT_PUBLIC_URL=$PUBLIC_URL" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,VERIFIED_FACTS=VERIFIED_FACTS:latest,RESUME_SE=RESUME_SE:latest,RESUME_FDE=RESUME_FDE:latest,JOBHUNT_LINK_SECRET=JOBHUNT_LINK_SECRET:latest,GITHUB_CLIENT_ID=GITHUB_CLIENT_ID:latest,GITHUB_CLIENT_SECRET=GITHUB_CLIENT_SECRET:latest,JOBHUNT_ALLOWED_GITHUB_ID=JOBHUNT_ALLOWED_GITHUB_ID:latest,SEARCH_API_KEY=SEARCH_API_KEY:latest"
+
+      - name: Smoke test
+        run: |
+          base="${PUBLIC_URL%/}"
+          health=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors \
+            --max-time 30 "$base/healthz")
+          echo "GET /healthz -> $health"
+          test "$health" = 200 || { echo "::error::/healthz returned $health, expected 200"; exit 1; }
+          mcp=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$base/mcp" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          echo "POST /mcp without a token -> $mcp"
+          test "$mcp" = 401 || { echo "::error::/mcp without a token returned $mcp, expected 401"; exit 1; }
