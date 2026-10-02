@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -410,8 +410,12 @@ def score_many(
     resumes: Resumes,
     *,
     limit: int | None = None,
+    on_score: Callable[[str, Score], None] | None = None,
 ) -> tuple[dict[str, Score], list[tuple[str, str]]]:
     """Score up to `limit` jobs one at a time. Returns (scores by uid, [(uid, error), ...]).
+
+    `on_score(uid, score)` runs after each success, so the caller can save each score as it
+    arrives instead of holding them all until the end of a long run.
 
     A failed job is recorded and skipped; it stays unscored and is picked up next run.
     After an auth/permission/not-found error the remaining jobs are recorded as failed
@@ -427,7 +431,7 @@ def score_many(
             failures.append((job.uid, f"skipped: {fatal}"))
             continue
         try:
-            scores[job.uid] = score_job(client, job, resumes)
+            score = score_job(client, job, resumes)
         except _FATAL_ERRORS as e:
             fatal = _describe(e)
             failures.append((job.uid, fatal))
@@ -435,6 +439,10 @@ def score_many(
         except (anthropic.APIError, ScoringError) as e:
             failures.append((job.uid, _describe(e)))
             log.warning("could not score %s: %s", job.uid, _describe(e))
+        else:
+            scores[job.uid] = score
+            if on_score is not None:
+                on_score(job.uid, score)
     return scores, failures
 
 

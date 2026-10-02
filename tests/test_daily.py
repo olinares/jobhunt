@@ -16,6 +16,7 @@ from typing import ClassVar
 
 import anthropic
 import httpx
+import psycopg
 import pytest
 import respx
 from anthropic.types import Message
@@ -330,3 +331,67 @@ def test_max_score_caps_scoring_and_the_rest_wait(boards, tmp_path, seeds):
     assert daily(tmp_path, seeds) == 0
     assert len(FakeAnthropic.calls) == RELEVANT
     assert f"{RELEVANT - 1} new" in FakeSMTP.sent[1]["Subject"]
+
+
+# --------------------------------------------------------------------------- dropped connection
+
+
+def test_dropped_connection_while_scoring_reconnects_and_still_emails(
+    boards, tmp_path, seeds, monkeypatch, capsys
+):
+    """Neon suspends an idle database and kills open connections. A save that hits a dead
+    connection reconnects and carries on, and the digest still goes out."""
+    real_open = cli.open_store
+    dropped = []
+
+    class DropsOnce:
+        def __init__(self, store):
+            self.store = store
+
+        def save_score(self, uid, score, *, now=None):
+            if not dropped:
+                dropped.append(uid)
+                raise psycopg.errors.AdminShutdown("terminating connection")
+            return self.store.save_score(uid, score, now=now)
+
+        def __getattr__(self, name):
+            return getattr(self.store, name)
+
+        def __enter__(self):
+            self.store.__enter__()
+            return self
+
+        def __exit__(self, *exc):
+            return self.store.__exit__(*exc)
+
+    monkeypatch.setattr(cli, "open_store", lambda target: DropsOnce(real_open(target)))
+
+    assert daily(tmp_path, seeds) == 0
+    assert len(dropped) == 1
+    assert "reconnecting" in capsys.readouterr().err
+    assert len(FakeSMTP.sent) == 1
+    assert len(digests(tmp_path)[0]) == RELEVANT  # the dropped save was retried, not lost
+
+
+def test_scores_are_saved_as_they_arrive(boards, tmp_path, seeds, monkeypatch):
+    """A crash part-way through scoring keeps the scores already paid for."""
+    FakeAnthropic.responses = [scored_message(), scored_message(), api_error(400)]
+    real_score_many = cli.score_many
+
+    def crash_after_two(client, jobs, resumes, **kwargs):
+        on_score = kwargs["on_score"]
+
+        def counting(uid, score):
+            on_score(uid, score)
+            counting.n += 1
+            if counting.n == 2:
+                raise RuntimeError("runner killed")
+
+        counting.n = 0
+        return real_score_many(client, jobs, resumes, **{**kwargs, "on_score": counting})
+
+    monkeypatch.setattr(cli, "score_many", crash_after_two)
+    with pytest.raises(RuntimeError):
+        daily(tmp_path, seeds)
+    with SqliteStore(tmp_path / "jobs.db") as store:
+        assert len(store.jobs_for_digest()) == 2
