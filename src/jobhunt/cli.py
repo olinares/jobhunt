@@ -7,16 +7,18 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import smtplib
 import sys
 import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import TextIO
+from typing import Self, TextIO
 from zoneinfo import ZoneInfo
 
 import anthropic
+import psycopg
 
 from jobhunt.adapters import build_adapters
 from jobhunt.adapters.http import PoliteClient
@@ -24,7 +26,7 @@ from jobhunt.config import ConfigError, RolesConfig, load_config
 from jobhunt.digest import DigestConfigError, DigestStats, render_digest, send_email
 from jobhunt.discovery.search import SearchClient, SearchConfigError, SerperClient
 from jobhunt.formatting import format_locations, format_pay
-from jobhunt.models import BoardRef, Job
+from jobhunt.models import BoardRef, Job, Score
 from jobhunt.pipeline import DEFAULT_WORKERS, RunReport, load_seeds, run
 from jobhunt.scoring import ResumeNotFound, Resumes, load_resumes, score_many
 from jobhunt.store import Store, open_store
@@ -202,15 +204,21 @@ def _daily(args: argparse.Namespace, *, out: TextIO, err: TextIO) -> int:
         print(f"error: {exc}", file=err)
         return 2
 
+    # Three connections, not one: scoring can run for many minutes without touching the
+    # database, and Neon suspends an idle database after ~5 minutes, which kills any open
+    # connection. So no connection is held across scoring (_ScoreSaver reconnects if one
+    # drops anyway), and the digest step opens a fresh one.
     with open_store(args.db) as store:
         report = _run_pipeline(args, store, cfg, seeds, err=err)
         print(format_summary(report, shown=len(report.new_jobs), all_jobs=False), file=err)
+        to_score = store.jobs_to_score(args.max_score, now=datetime.now(UTC))
 
-        scored, failures = _score(store, resumes, limit=args.max_score)
-        for uid, error in failures:
-            print(f"Scoring failed {uid}: {error}", file=err)
-        print(f"Scored {scored} job(s); {len(failures)} failed.", file=err)
+    scored, failures = _score(args.db, to_score, resumes)
+    for uid, error in failures:
+        print(f"Scoring failed {uid}: {error}", file=err)
+    print(f"Scored {scored} job(s); {len(failures)} failed.", file=err)
 
+    with open_store(args.db) as store:
         items = store.jobs_for_digest()
         stats = _digest_stats(
             report, scored=scored, score_failures=len(failures), no_discover=args.no_discover
@@ -244,16 +252,50 @@ def _require_env(names: list[str]) -> None:
         raise ConfigError("environment variable(s) not set: " + ", ".join(missing))
 
 
-def _score(store: Store, resumes: Resumes, *, limit: int) -> tuple[int, list[tuple[str, str]]]:
-    """Score up to `limit` unscored jobs and save each score. Returns (saved, failures)."""
-    jobs = store.jobs_to_score(limit, now=datetime.now(UTC))
+def _score(db: str, jobs: list[Job], resumes: Resumes) -> tuple[int, list[tuple[str, str]]]:
+    """Score `jobs`, saving each score as soon as it arrives. Returns (saved, failures).
+
+    Saving as we go means a crash part-way through keeps every score already paid for.
+    """
     if not jobs:
         return 0, []
-    scores, failures = score_many(anthropic_client(), jobs, resumes)
-    now = datetime.now(UTC)
-    for uid, score in scores.items():
-        store.save_score(uid, score, now=now)
+    with _ScoreSaver(db) as saver:
+        scores, failures = score_many(anthropic_client(), jobs, resumes, on_score=saver.save)
     return len(scores), failures
+
+
+class _ScoreSaver:
+    """Saves scores through one connection, reopening it once if the server dropped it
+    (Neon closes connections when it suspends an idle database)."""
+
+    def __init__(self, db: str) -> None:
+        self.db = db
+        self.store: Store | None = None
+
+    def save(self, uid: str, score: Score) -> None:
+        for attempt in (1, 2):
+            if self.store is None:
+                self.store = open_store(self.db)
+            try:
+                self.store.save_score(uid, score, now=datetime.now(UTC))
+                return
+            except psycopg.OperationalError:
+                self.close()
+                if attempt == 2:
+                    raise
+                print(f"database connection lost while saving {uid}; reconnecting", file=sys.stderr)
+
+    def close(self) -> None:
+        if self.store is not None:
+            with contextlib.suppress(Exception):  # the connection may already be gone
+                self.store.close()
+            self.store = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
 
 
 def _digest_stats(
